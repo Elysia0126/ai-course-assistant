@@ -23,6 +23,9 @@
     "remark-math": "^6.0.0",
     "sonner": "^2.0.8"
   },
+  "overrides": {
+    "katex": "$katex"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.2",
