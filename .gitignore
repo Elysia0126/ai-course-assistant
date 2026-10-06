@@ -1,0 +1,31 @@
+# Secrets & local config
+.env
+.env.*
+!.env.example
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Backend runtime data (uploads, embedded Postgres, downloaded embedding models)
+backend/data/
+
+# Node / Next.js (see also frontend/.gitignore)
+node_modules/
+.next/
+frontend/next-env.d.ts
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
