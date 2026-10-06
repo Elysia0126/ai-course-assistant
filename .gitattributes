@@ -1,0 +1,12 @@
+# Normalise text to LF everywhere (Docker images and CI run on Linux).
+* text=auto eol=lf
+
+# Never touch line endings in binary course materials or images.
+*.pdf binary
+*.pptx binary
+*.docx binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.svg text eol=lf
