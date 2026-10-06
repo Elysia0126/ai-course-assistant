@@ -1,0 +1,55 @@
+# Full stack: PostgreSQL + pgvector, FastAPI backend, Next.js frontend.
+#   cp .env.example .env      # optional: add ANTHROPIC_API_KEY etc.
+#   docker compose up --build
+# Frontend http://localhost:3000 · API docs http://localhost:8000/docs
+name: ai-course-assistant
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: course_assistant
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d course_assistant"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Overrides whatever .env says so the container always talks to the compose database.
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/course_assistant
+      CORS_ORIGINS: http://localhost:3000
+      UPLOAD_DIR: /app/data/uploads
+    volumes:
+      - uploads:/app/data/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  uploads:
