@@ -13,7 +13,8 @@ extend-exclude = [".venv", "data"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
-ignore = ["B008", "RUF001", "RUF002", "RUF003"]
+# SIM905: "a b c".split() word lists read better than 50-line list literals.
+ignore = ["B008", "RUF001", "RUF002", "RUF003", "SIM905"]
 
 [tool.ruff.lint.isort]
 # The local alembic/ migrations folder must not shadow the alembic package.

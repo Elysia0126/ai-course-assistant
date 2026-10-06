@@ -194,6 +194,28 @@ def test_offline_answer_prefers_specific_self_contained_sentences() -> None:
     assert not any(line.startswith("- Vanishing and Exploding Gradients [") for line in bullets)
 
 
+def test_offline_definitions_ignore_structure_and_speaker_notes() -> None:
+    sources = [
+        RetrievedChunk(
+            "c1",
+            "d1",
+            "Lecture05.pptx",
+            "pptx",
+            "Lecture 3: Optimization with Gradient Descent and its many variants\n"
+            "Speaker notes: Today we build up from a single neuron to multi-layer networks\n"
+            "Momentum is a method that accumulates past gradients to accelerate optimization.",
+            1,
+            None,
+            0,
+        )
+    ]
+    deck = OfflineBackend(seed=1).generate_flashcards(course_name="ML", sources=sources, num_cards=10, topic=None)
+    fronts = [c.front for c in deck.cards]
+    assert "What is Momentum?" in fronts
+    assert "What is Lecture 3?" not in fronts
+    assert not any("speaker notes" in (c.front + c.back).lower() for c in deck.cards)
+
+
 def test_offline_backend_builds_questions_from_definitions() -> None:
     sources = [
         SOURCE,

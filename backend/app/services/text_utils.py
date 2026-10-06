@@ -17,7 +17,7 @@ STOPWORDS = frozenset(
     won't would wouldn't you you'd you'll you're you've your yours yourself yourselves also may might must shall
     will one two use used using via e.g i.e etc however thus therefore within without per
     explain describe define definition question answer tell give show example examples please
-    """.split()  # noqa: SIM905 - a word list is far more readable than a 200-line literal
+    """.split()
 )
 
 # Hiragana/Katakana, CJK Extension A, and CJK Unified Ideographs.

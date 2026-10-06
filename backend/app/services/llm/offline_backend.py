@@ -31,34 +31,17 @@ _DEFINITION_RE = re.compile(
     re.IGNORECASE,
 )
 _COLON_RE = re.compile(r"^(?P<term>[A-Za-z][\w\-/() ]{1,50}):\s+(?P<definition>.{15,300}?)\.?$")
-_BAD_TERM_START = {
-    "this",
-    "it",
-    "that",
-    "these",
-    "there",
-    "they",
-    "which",
-    "what",
-    "here",
-    "each",
-    "one",
-    "our",
-    "we",
-    "you",
-    "he",
-    "she",
-    "its",
-    "their",
-    "such",
-    "all",
-    "most",
-    "some",
-    "many",
-    "when",
-    "if",
-    "how",
-}
+_NOTES_PREFIX = re.compile(r"^speaker notes:\s*", re.IGNORECASE)
+# Sentences starting with these depend on context the reader can't see ("It prevents …").
+_BAD_TERM_START = frozenset(
+    "this it that these there they which what here each one our we you he she its their such all most some "
+    "many when if how".split()
+)
+# Labels that look like "Term: definition" but are document structure, not concepts.
+_STRUCTURAL_TERMS = frozenset(
+    "lecture chapter week slide section part unit module topic agenda outline summary overview note notes tip "
+    "tips example examples fix fixes hint warning goal goals objective objectives reading readings".split()
+)
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z\-]{3,}")
 
 OFFLINE_NOTE = (
@@ -85,10 +68,20 @@ def _candidates(sources: list[RetrievedChunk]) -> list[_Candidate]:
     for i, src in enumerate(sources, start=1):
         for sentence in split_sentences(src.content):
             for line in sentence.split("\n"):
-                line = _BULLET_RE.sub("", line).strip()
+                line = _NOTES_PREFIX.sub("", _BULLET_RE.sub("", line)).strip()
                 if line:
                     out.append(_Candidate(line, i))
     return out
+
+
+def _is_concept_term(term: str) -> bool:
+    words = term.lower().split()
+    return (
+        1 <= len(words) <= 6
+        and words[0] not in _BAD_TERM_START
+        and words[0] not in _STRUCTURAL_TERMS
+        and not any(ch.isdigit() for ch in term)
+    )
 
 
 def _good_sentence(text: str) -> bool:
@@ -106,8 +99,7 @@ def _definitions(candidates: list[_Candidate]) -> list[_Definition]:
             continue
         term = match.group("term").strip(" -")
         definition = match.group("definition").strip()
-        words = term.split()
-        if not 1 <= len(words) <= 6 or words[0].lower() in _BAD_TERM_START or term.lower() in seen:
+        if not _is_concept_term(term) or term.lower() in seen:
             continue
         if len(definition.split()) < 4:
             continue
@@ -181,8 +173,13 @@ class OfflineBackend:
 
     def _extractive_answer(self, question: str, sources: list[RetrievedChunk]) -> str:
         q_terms = set(tokenize(question))
-        # Skip headings and fragments: real statements are longer and usually punctuated.
-        candidates = [c for c in _candidates(sources) if len(c.text) >= 25 and len(c.text.split()) >= 6]
+        # Keep self-contained statements: no headings/fragments, and nothing that opens with a pronoun
+        # ("It prevents …") whose referent was in a sentence the reader won't see.
+        candidates = [
+            c
+            for c in _candidates(sources)
+            if len(c.text) >= 25 and len(c.text.split()) >= 6 and c.text.split()[0].lower() not in _BAD_TERM_START
+        ]
         term_sets = [set(tokenize(c.text)) for c in candidates]
         doc_freq = Counter(t for terms in term_sets for t in terms)
         n = max(len(candidates), 1)
@@ -193,13 +190,11 @@ class OfflineBackend:
             if not overlap:
                 continue
             # Rare shared terms ("vanish") matter more than ubiquitous ones ("gradient"); higher-ranked
-            # sources and definition-like sentences get a boost; pronoun-led sentences lack context.
+            # sources and definition-like sentences get a boost.
             score = sum(math.log(1 + n / (1 + doc_freq[t])) for t in overlap) / math.sqrt(len(terms) + 1)
             score += 0.4 / cand.source_id
             if _DEFINITION_RE.match(cand.text):
                 score += 0.3
-            if cand.text.split()[0].lower() in _BAD_TERM_START:
-                score -= 0.3
             scored.append((score, cand.source_id, cand.text))
 
         scored.sort(key=lambda item: item[0], reverse=True)
@@ -333,17 +328,16 @@ class OfflineBackend:
                     source_id=definition.source_id,
                 )
             for i, src in enumerate(sources, start=1):
-                label = src.section or src.location
                 key = f"section:{i}"
-                if not label or key in used_sentences:
+                summary = _section_summary(src)
+                if not src.section or not summary or key in used_sentences:
                     continue
                 used_sentences.add(key)
-                summary = " ".join(split_sentences(src.content)[:2])
                 return QuestionDraft(
                     type="short_answer",
-                    question=f"Summarize the key idea of “{label}”.",
+                    question=f"Summarize the key idea of “{src.section}”.",
                     options=[],
-                    answer=truncate(summary, 300),
+                    answer=summary,
                     explanation="Compare your answer with the key points in the cited source.",
                     source_id=i,
                 )
@@ -403,12 +397,18 @@ class OfflineBackend:
                     break
 
         for i, src in enumerate(sources, start=1):
-            label = src.section or src.location
-            if label:
-                add(f"Key idea: {label}", truncate(" ".join(split_sentences(src.content)[:2]), 280), i)
+            summary = _section_summary(src)
+            if src.section and summary:
+                add(f"Key idea: {src.section}", summary, i)
 
         title = f"Flashcards: {topic}" if topic else f"Key concepts — {_deck_label(sources)}"
         return DeckDraft(title=title[:200], cards=cards)
+
+
+def _section_summary(src: RetrievedChunk, limit: int = 280) -> str:
+    """First two real sentences of a chunk (skipping its title line and speaker-notes labels)."""
+    sentences = [c.text for c in _candidates([src]) if c.text != src.section and len(c.text.split()) >= 6]
+    return truncate(" ".join(sentences[:2]), limit) if sentences else ""
 
 
 def _deck_label(sources: list[RetrievedChunk]) -> str:
