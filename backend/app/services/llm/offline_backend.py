@@ -42,6 +42,7 @@ _STRUCTURAL_TERMS = frozenset(
     "lecture chapter week slide section part unit module topic agenda outline summary overview note notes tip "
     "tips example examples fix fixes hint warning goal goals objective objectives reading readings".split()
 )
+_HEDGE_WORDS = frozenset("not also often usually typically very more less still too only just already".split())
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z\-]{3,}")
 
 OFFLINE_NOTE = (
@@ -100,6 +101,10 @@ def _definitions(candidates: list[_Candidate]) -> list[_Definition]:
         term = match.group("term").strip(" -")
         definition = match.group("definition").strip()
         if not _is_concept_term(term) or term.lower() in seen:
+            continue
+        first = definition.split()[0].lower() if definition else ""
+        # "X are trained by …" / "X is often …" describe X rather than define it.
+        if first.endswith("ed") or first in _HEDGE_WORDS:
             continue
         if len(definition.split()) < 4:
             continue
@@ -178,7 +183,10 @@ class OfflineBackend:
         candidates = [
             c
             for c in _candidates(sources)
-            if len(c.text) >= 25 and len(c.text.split()) >= 6 and c.text.split()[0].lower() not in _BAD_TERM_START
+            if len(c.text) >= 25
+            and len(c.text.split()) >= 6
+            and c.text.split()[0].lower() not in _BAD_TERM_START
+            and c.text != sources[c.source_id - 1].section  # slide/page titles aren't statements
         ]
         term_sets = [set(tokenize(c.text)) for c in candidates]
         doc_freq = Counter(t for terms in term_sets for t in terms)
