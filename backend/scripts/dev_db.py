@@ -11,6 +11,7 @@ Requires `pip install pgserver` (Python <= 3.12; included in requirements-dev.tx
 import argparse
 import re
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -42,7 +43,18 @@ def main() -> None:
         sys.exit("pgserver is not installed. Run: pip install pgserver  (Python <= 3.12)")
 
     DATA_DIR.parent.mkdir(parents=True, exist_ok=True)
-    server = pgserver.get_server(DATA_DIR, cleanup_mode="stop")
+    server = None
+    for attempt in range(1, 5):
+        try:
+            server = pgserver.get_server(DATA_DIR, cleanup_mode="stop")
+            break
+        except subprocess.TimeoutExpired:
+            # After an unclean shutdown Postgres replays WAL first, which can outlast pgserver's 10 s
+            # start timeout. The server keeps starting in the background; wait and attach to it.
+            print(f"Postgres is still recovering (attempt {attempt}); waiting…", flush=True)
+            time.sleep(15)
+    if server is None:
+        sys.exit(f"Postgres did not start. See the log in {DATA_DIR / 'log'}")
     for name in databases:
         exists = server.psql(f"SELECT 1 FROM pg_database WHERE datname = '{name}';")
         if "1 row" not in exists:
