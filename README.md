@@ -3,6 +3,7 @@
 **Upload your lecture slides, PDFs and notes — then ask questions with page-level citations, generate quizzes, and
 study flashcards on a spaced-repetition schedule. Everything is grounded in *your* course materials.**
 
+[![CI](https://github.com/Elysia0126/ai-course-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/Elysia0126/ai-course-assistant/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.142-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
