@@ -1,0 +1,30 @@
+[project]
+name = "ai-course-assistant-backend"
+version = "1.0.0"
+description = "FastAPI backend for AI Course Assistant: RAG over course materials, quizzes and flashcards."
+requires-python = ">=3.11"
+readme = "../README.md"
+license = { text = "MIT" }
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [".venv", "data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["B008", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.isort]
+# The local alembic/ migrations folder must not shadow the alembic package.
+known-third-party = ["alembic"]
+known-first-party = ["app", "tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/env.py" = ["E402", "I001"]
+"tests/**" = ["B011"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]

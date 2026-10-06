@@ -1,0 +1,26 @@
+# Runtime dependencies for the AI Course Assistant API.
+# Web
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pydantic>=2.7
+pydantic-settings>=2.3
+
+# Database
+sqlalchemy>=2.0.30
+alembic>=1.13
+psycopg[binary]>=3.2
+pgvector>=0.3
+
+# Document parsing
+pypdf>=5.0
+python-pptx>=1.0
+python-docx>=1.1
+
+# Retrieval / ML
+numpy>=1.26
+fastembed>=0.5
+
+# LLM providers
+anthropic>=1.0
+openai>=1.50
