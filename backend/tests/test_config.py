@@ -1,4 +1,5 @@
 import pytest
+from pydantic import SecretStr
 
 from app.core.config import Settings
 
@@ -17,6 +18,20 @@ def test_blank_optional_values_become_none(monkeypatch: pytest.MonkeyPatch) -> N
     assert settings.anthropic_api_key is None
     assert settings.anthropic_effort is None
     assert settings.resolved_llm_provider == "offline"
+
+
+def test_optional_api_token_protects_everything_but_health(settings) -> None:
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    secured = settings.model_copy(update={"app_api_token": SecretStr("s3cret"), "auto_migrate": False})
+    with TestClient(create_app(secured)) as client:
+        assert client.get("/api/health").status_code == 200
+        denied = client.get("/api/courses")
+        assert denied.status_code == 401 and denied.json()["error"]["code"] == "unauthorized"
+        assert client.get("/api/courses", headers={"Authorization": "Bearer wrong"}).status_code == 401
+        assert client.get("/api/courses", headers={"Authorization": "Bearer s3cret"}).status_code == 200
 
 
 def test_dialect_helpers() -> None:

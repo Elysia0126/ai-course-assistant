@@ -7,8 +7,8 @@ RUN npm ci
 FROM node:24-alpine AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
-# The API URL is inlined into the client bundle at build time.
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+# Empty by default: the browser calls this server's /api proxy, which reads BACKEND_URL at runtime.
+ARG NEXT_PUBLIC_API_URL=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

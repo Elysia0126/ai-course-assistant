@@ -66,7 +66,8 @@ def chat_stream(
     return StreamingResponse(
         events(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        # no-transform stops proxies/compression middleware (incl. Next.js) from buffering the stream.
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )
 
 

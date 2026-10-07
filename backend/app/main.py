@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import hmac
 import logging
 import threading
 import time
@@ -9,9 +10,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app import __version__
-from app.api.routes import chat, courses, documents, flashcards, health, quizzes
+from app.api.routes import chat, courses, demo, documents, flashcards, health, quizzes
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
@@ -66,6 +68,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.embedder = embedder
     app.state.llm = llm
 
+    api_token = settings.app_api_token.get_secret_value() if settings.app_api_token else ""
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -79,6 +83,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def request_context(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:12]
         started = time.perf_counter()
+        path = request.url.path
+        if api_token and path.startswith("/api/") and path != "/api/health" and request.method != "OPTIONS":
+            supplied = request.headers.get("authorization", "")
+            if not hmac.compare_digest(supplied.encode(), f"Bearer {api_token}".encode()):
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "error": {"code": "unauthorized", "message": "A valid API token is required.", "details": None}
+                    },
+                )
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         # Basic hardening: no MIME sniffing of uploads, no framing, no referrer leakage.
@@ -99,7 +113,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
 
     api = APIRouter(prefix="/api")
-    for module in (health, courses, documents, chat, quizzes, flashcards):
+    for module in (health, courses, demo, documents, chat, quizzes, flashcards):
         api.include_router(module.router)
     app.include_router(api)
 

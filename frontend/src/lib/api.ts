@@ -22,7 +22,10 @@ import type {
   UploadResult,
 } from "./types";
 
-export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+// Empty = same origin: requests go to this Next.js server's /api proxy (src/app/api/[...path]/route.ts),
+// which forwards them to BACKEND_URL. Set NEXT_PUBLIC_API_URL only to call a backend directly (needs CORS).
+export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+const API_LABEL = API_URL || "the app server";
 
 export class ApiError extends Error {
   constructor(
@@ -60,7 +63,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       headers: init.body instanceof FormData ? init.headers : { "Content-Type": "application/json", ...init.headers },
     });
   } catch {
-    throw new ApiError(0, "network_error", `Cannot reach the API at ${API_URL}. Is the backend running?`);
+    throw new ApiError(0, "network_error", `Cannot reach the API at ${API_LABEL}. Is the backend running?`);
   }
   if (!response.ok) throw await toApiError(response);
   if (response.status === 204) return undefined as T;
@@ -79,7 +82,7 @@ function uploadFiles(courseId: string, files: File[], onProgress?: (fraction: nu
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress?.(event.loaded / event.total);
     };
-    xhr.onerror = () => reject(new ApiError(0, "network_error", `Cannot reach the API at ${API_URL}.`));
+    xhr.onerror = () => reject(new ApiError(0, "network_error", `Cannot reach the API at ${API_LABEL}.`));
     xhr.onload = () => {
       let body: unknown = null;
       try {
@@ -127,7 +130,7 @@ async function streamChat(
     });
   } catch (error) {
     if ((error as Error).name === "AbortError") throw error;
-    throw new ApiError(0, "network_error", `Cannot reach the API at ${API_URL}. Is the backend running?`);
+    throw new ApiError(0, "network_error", `Cannot reach the API at ${API_LABEL}. Is the backend running?`);
   }
   if (!response.ok || !response.body) throw await toApiError(response);
 

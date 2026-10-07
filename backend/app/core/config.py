@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -24,12 +24,17 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # NoDecode: accept "a,b" from the environment instead of requiring a JSON array.
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["http://localhost:3000"])
+    # Optional shared secret between the Next.js server-side proxy and this API. When set, every /api route
+    # except /api/health requires "Authorization: Bearer <token>", so the API can't be called around the proxy.
+    app_api_token: SecretStr | None = None
 
     # --- Storage ---------------------------------------------------------------
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/course_assistant"
     # Run Alembic migrations on startup (handy locally; the Docker image migrates before starting).
     auto_migrate: bool = True
     upload_dir: Path = BACKEND_DIR / "data" / "uploads"
+    # Materials for the one-click demo course (POST /api/demo).
+    demo_dir: Path = BACKEND_DIR.parent / "sample_data"
     max_upload_mb: int = 25
     # Guards against pathological uploads (huge decks, zip bombs, text dumps).
     max_pages: int = 500
@@ -75,7 +80,13 @@ class Settings(BaseSettings):
         return value
 
     @field_validator(
-        "anthropic_api_key", "anthropic_effort", "openai_api_key", "openai_base_url", "openai_model", mode="before"
+        "anthropic_api_key",
+        "anthropic_effort",
+        "openai_api_key",
+        "openai_base_url",
+        "openai_model",
+        "app_api_token",
+        mode="before",
     )
     @classmethod
     def _blank_to_none(cls, value: object) -> object:
