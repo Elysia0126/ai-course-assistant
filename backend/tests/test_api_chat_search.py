@@ -21,6 +21,18 @@ def test_search_returns_hybrid_scores_and_locations(client: TestClient, ready_co
     assert top["keyword_score"] > 0 and top["vector_score"] > 0
 
 
+def test_search_modes_for_ablation(client: TestClient, ready_course: dict) -> None:
+    url = f"/api/courses/{ready_course['id']}/search"
+    keyword = client.post(url, json={"query": "warmup learning rate", "mode": "keyword"}).json()["results"]
+    assert keyword and keyword[0]["page_number"] == 2
+    # Keyword-only retrieval returns nothing for a query sharing no terms with the material…
+    assert client.post(url, json={"query": "zebra xylophone", "mode": "keyword"}).json()["results"] == []
+    # …while vector-only always returns nearest neighbours (which is why low_confidence exists).
+    vector = client.post(url, json={"query": "zebra xylophone", "mode": "vector"}).json()
+    assert vector["results"] and vector["low_confidence"] is True
+    assert client.post(url, json={"query": "x", "mode": "magic"}).status_code == 422
+
+
 def test_search_can_be_scoped_to_documents(client: TestClient, ready_course: dict) -> None:
     docs = client.get(f"/api/courses/{ready_course['id']}/documents").json()
     pptx = next(d for d in docs if d["file_type"] == "pptx")

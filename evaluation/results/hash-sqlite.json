@@ -1,0 +1,478 @@
+{
+  "config": {
+    "embedding": "hash",
+    "embedding_model": "feature-hash-384",
+    "database": "sqlite",
+    "chunks": 23,
+    "questions": {
+      "lexical": 16,
+      "paraphrase": 12,
+      "unanswerable": 5
+    },
+    "top_k": 10
+  },
+  "metrics": {
+    "vector": {
+      "all": {
+        "recall@1": 0.714,
+        "recall@3": 0.893,
+        "recall@5": 0.893,
+        "mrr": 0.81
+      },
+      "lexical": {
+        "recall@1": 0.812,
+        "recall@3": 1.0,
+        "recall@5": 1.0,
+        "mrr": 0.906
+      },
+      "paraphrase": {
+        "recall@1": 0.583,
+        "recall@3": 0.75,
+        "recall@5": 0.75,
+        "mrr": 0.681
+      }
+    },
+    "keyword": {
+      "all": {
+        "recall@1": 0.821,
+        "recall@3": 0.929,
+        "recall@5": 0.964,
+        "mrr": 0.888
+      },
+      "lexical": {
+        "recall@1": 0.875,
+        "recall@3": 1.0,
+        "recall@5": 1.0,
+        "mrr": 0.938
+      },
+      "paraphrase": {
+        "recall@1": 0.75,
+        "recall@3": 0.833,
+        "recall@5": 0.917,
+        "mrr": 0.822
+      }
+    },
+    "hybrid": {
+      "all": {
+        "recall@1": 0.821,
+        "recall@3": 0.929,
+        "recall@5": 1.0,
+        "mrr": 0.885
+      },
+      "lexical": {
+        "recall@1": 0.938,
+        "recall@3": 1.0,
+        "recall@5": 1.0,
+        "mrr": 0.969
+      },
+      "paraphrase": {
+        "recall@1": 0.667,
+        "recall@3": 0.833,
+        "recall@5": 1.0,
+        "mrr": 0.774
+      }
+    }
+  },
+  "low_confidence_detection": {
+    "unanswerable_flagged": 0.8,
+    "answerable_false_alarms": 0.071
+  },
+  "rows": [
+    {
+      "id": "L01",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.4426,
+      "top_hit": "Lecture03_Gradient_Descent.pdf \u00b7 page 2"
+    },
+    {
+      "id": "L02",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.3601,
+      "top_hit": "Lecture03_Gradient_Descent.pdf \u00b7 page 3"
+    },
+    {
+      "id": "L03",
+      "category": "lexical",
+      "ranks": {
+        "vector": 2,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": true,
+      "best_vector_score": 0.0572,
+      "top_hit": "Lecture03_Gradient_Descent.pdf \u00b7 page 5"
+    },
+    {
+      "id": "L04",
+      "category": "lexical",
+      "ranks": {
+        "vector": 2,
+        "keyword": 2,
+        "hybrid": 2
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.2221,
+      "top_hit": "Regularization_Study_Guide.md \u00b7 Early Stopping"
+    },
+    {
+      "id": "L05",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 2,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.156,
+      "top_hit": "Lecture03_Gradient_Descent.pdf \u00b7 page 6"
+    },
+    {
+      "id": "L06",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.2462,
+      "top_hit": "Lecture03_Gradient_Descent.pdf \u00b7 page 1"
+    },
+    {
+      "id": "L07",
+      "category": "lexical",
+      "ranks": {
+        "vector": 2,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.221,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 3"
+    },
+    {
+      "id": "L08",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.1796,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 4"
+    },
+    {
+      "id": "L09",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.2275,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 6"
+    },
+    {
+      "id": "L10",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.3045,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 7"
+    },
+    {
+      "id": "L11",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.385,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 5"
+    },
+    {
+      "id": "L12",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.3027,
+      "top_hit": "Regularization_Study_Guide.md \u00b7 Dropout"
+    },
+    {
+      "id": "L13",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.3698,
+      "top_hit": "Regularization_Study_Guide.md \u00b7 L1 Regularization"
+    },
+    {
+      "id": "L14",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.5481,
+      "top_hit": "Regularization_Study_Guide.md \u00b7 Cross-Validation"
+    },
+    {
+      "id": "L15",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.3264,
+      "top_hit": "Regularization_Study_Guide.md \u00b7 Early Stopping"
+    },
+    {
+      "id": "L16",
+      "category": "lexical",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.4434,
+      "top_hit": "Regularization_Study_Guide.md \u00b7 Bias and Variance"
+    },
+    {
+      "id": "P01",
+      "category": "paraphrase",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.2176,
+      "top_hit": "Lecture03_Gradient_Descent.pdf \u00b7 page 3"
+    },
+    {
+      "id": "P02",
+      "category": "paraphrase",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.1865,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 2"
+    },
+    {
+      "id": "P03",
+      "category": "paraphrase",
+      "ranks": {
+        "vector": 9,
+        "keyword": 6,
+        "hybrid": 4
+      },
+      "low_confidence": true,
+      "best_vector_score": 0.0841,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 2"
+    },
+    {
+      "id": "P04",
+      "category": "paraphrase",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.2616,
+      "top_hit": "Regularization_Study_Guide.md \u00b7 Data Augmentation"
+    },
+    {
+      "id": "P05",
+      "category": "paraphrase",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.1261,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 3"
+    },
+    {
+      "id": "P06",
+      "category": "paraphrase",
+      "ranks": {
+        "vector": 10,
+        "keyword": 2,
+        "hybrid": 5
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.1647,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 1"
+    },
+    {
+      "id": "P07",
+      "category": "paraphrase",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.28,
+      "top_hit": "Regularization_Study_Guide.md \u00b7 Early Stopping"
+    },
+    {
+      "id": "P08",
+      "category": "paraphrase",
+      "ranks": {
+        "vector": 8,
+        "keyword": 1,
+        "hybrid": 3
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.1774,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 8"
+    },
+    {
+      "id": "P09",
+      "category": "paraphrase",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.2366,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 6"
+    },
+    {
+      "id": "P10",
+      "category": "paraphrase",
+      "ranks": {
+        "vector": 3,
+        "keyword": 5,
+        "hybrid": 2
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.1775,
+      "top_hit": "Lecture03_Gradient_Descent.pdf \u00b7 page 1"
+    },
+    {
+      "id": "P11",
+      "category": "paraphrase",
+      "ranks": {
+        "vector": 2,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.1513,
+      "top_hit": "Lecture03_Gradient_Descent.pdf \u00b7 page 3"
+    },
+    {
+      "id": "P12",
+      "category": "paraphrase",
+      "ranks": {
+        "vector": 1,
+        "keyword": 1,
+        "hybrid": 1
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.2099,
+      "top_hit": "Lecture03_Gradient_Descent.pdf \u00b7 page 4"
+    },
+    {
+      "id": "U01",
+      "category": "unanswerable",
+      "ranks": {
+        "vector": null,
+        "keyword": null,
+        "hybrid": null
+      },
+      "low_confidence": true,
+      "best_vector_score": 0.0614,
+      "top_hit": "Regularization_Study_Guide.md \u00b7 Bias and Variance"
+    },
+    {
+      "id": "U02",
+      "category": "unanswerable",
+      "ranks": {
+        "vector": null,
+        "keyword": null,
+        "hybrid": null
+      },
+      "low_confidence": true,
+      "best_vector_score": 0.0738,
+      "top_hit": "Regularization_Study_Guide.md \u00b7 L1 Regularization"
+    },
+    {
+      "id": "U03",
+      "category": "unanswerable",
+      "ranks": {
+        "vector": null,
+        "keyword": null,
+        "hybrid": null
+      },
+      "low_confidence": false,
+      "best_vector_score": 0.1537,
+      "top_hit": "Regularization_Study_Guide.md \u00b7 Overfitting"
+    },
+    {
+      "id": "U04",
+      "category": "unanswerable",
+      "ranks": {
+        "vector": null,
+        "keyword": null,
+        "hybrid": null
+      },
+      "low_confidence": true,
+      "best_vector_score": 0.0599,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 8"
+    },
+    {
+      "id": "U05",
+      "category": "unanswerable",
+      "ranks": {
+        "vector": null,
+        "keyword": null,
+        "hybrid": null
+      },
+      "low_confidence": true,
+      "best_vector_score": 0.0967,
+      "top_hit": "Lecture05_Neural_Networks.pptx \u00b7 slide 8"
+    }
+  ]
+}

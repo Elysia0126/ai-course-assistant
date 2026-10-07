@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -58,6 +58,9 @@ class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
     top_k: int = Field(default=8, ge=1, le=30)
     document_ids: list[str] | None = None
+    mode: Literal["hybrid", "vector", "keyword"] = Field(
+        default="hybrid", description="Ablation switch: fused ranking, dense vectors only, or keywords only"
+    )
 
 
 class SearchResponse(BaseModel):

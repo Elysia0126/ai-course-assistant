@@ -1,0 +1,40 @@
+{
+  "description": "Hand-labelled retrieval set over the demo course in sample_data/. A hit means a retrieved chunk comes from one of the listed locations (file + page/slide, or file + Markdown section). 'paraphrase' questions are phrased the way a student might ask, without the key term from the material; 'unanswerable' questions are not covered by the material and should be flagged low-confidence.",
+  "questions": [
+    {"id": "L01", "category": "lexical", "question": "What is the update rule used by gradient descent?", "relevant": [{"file": "Lecture03_Gradient_Descent.pdf", "page": 2}]},
+    {"id": "L02", "category": "lexical", "question": "What does learning rate warmup do?", "relevant": [{"file": "Lecture03_Gradient_Descent.pdf", "page": 3}]},
+    {"id": "L03", "category": "lexical", "question": "What are Adam's default hyperparameters?", "relevant": [{"file": "Lecture03_Gradient_Descent.pdf", "page": 5}]},
+    {"id": "L04", "category": "lexical", "question": "What is an epoch?", "relevant": [{"file": "Lecture03_Gradient_Descent.pdf", "page": 4}]},
+    {"id": "L05", "category": "lexical", "question": "What is gradient clipping?", "relevant": [{"file": "Lecture03_Gradient_Descent.pdf", "page": 6}]},
+    {"id": "L06", "category": "lexical", "question": "What is a loss function?", "relevant": [{"file": "Lecture03_Gradient_Descent.pdf", "page": 1}]},
+    {"id": "L07", "category": "lexical", "question": "What does the ReLU activation compute?", "relevant": [{"file": "Lecture05_Neural_Networks.pptx", "page": 3}]},
+    {"id": "L08", "category": "lexical", "question": "What does the universal approximation theorem state?", "relevant": [{"file": "Lecture05_Neural_Networks.pptx", "page": 4}]},
+    {"id": "L09", "category": "lexical", "question": "How does backpropagation compute the gradient of the loss?", "relevant": [{"file": "Lecture05_Neural_Networks.pptx", "page": 6}]},
+    {"id": "L10", "category": "lexical", "question": "What is the vanishing gradient problem?", "relevant": [{"file": "Lecture05_Neural_Networks.pptx", "page": 7}]},
+    {"id": "L11", "category": "lexical", "question": "What does softmax do in the forward pass?", "relevant": [{"file": "Lecture05_Neural_Networks.pptx", "page": 5}]},
+    {"id": "L12", "category": "lexical", "question": "What is dropout?", "relevant": [{"file": "Regularization_Study_Guide.md", "section": "Dropout"}]},
+    {"id": "L13", "category": "lexical", "question": "How is L1 regularization different from L2 regularization?", "relevant": [{"file": "Regularization_Study_Guide.md", "section": "L1 Regularization"}, {"file": "Regularization_Study_Guide.md", "section": "L2 Regularization (Weight Decay)"}]},
+    {"id": "L14", "category": "lexical", "question": "What is k-fold cross-validation?", "relevant": [{"file": "Regularization_Study_Guide.md", "section": "Cross-Validation"}]},
+    {"id": "L15", "category": "lexical", "question": "What does patience mean in early stopping?", "relevant": [{"file": "Regularization_Study_Guide.md", "section": "Early Stopping"}]},
+    {"id": "L16", "category": "lexical", "question": "What is the bias-variance trade-off?", "relevant": [{"file": "Regularization_Study_Guide.md", "section": "Bias and Variance"}]},
+
+    {"id": "P01", "category": "paraphrase", "question": "My training loss shoots up to infinity after a few steps. What should I change?", "relevant": [{"file": "Lecture03_Gradient_Descent.pdf", "page": 3}, {"file": "Lecture05_Neural_Networks.pptx", "page": 8}]},
+    {"id": "P02", "category": "paraphrase", "question": "Why can't a single linear unit separate every pattern of two classes?", "relevant": [{"file": "Lecture05_Neural_Networks.pptx", "page": 2}]},
+    {"id": "P03", "category": "paraphrase", "question": "Why should inputs be put on the same scale before optimizing?", "relevant": [{"file": "Lecture03_Gradient_Descent.pdf", "page": 6}]},
+    {"id": "P04", "category": "paraphrase", "question": "How can I get more training images without collecting new data?", "relevant": [{"file": "Regularization_Study_Guide.md", "section": "Data Augmentation"}]},
+    {"id": "P05", "category": "paraphrase", "question": "Why does stacking layers add no expressive power if every layer is purely linear?", "relevant": [{"file": "Lecture05_Neural_Networks.pptx", "page": 3}]},
+    {"id": "P06", "category": "paraphrase", "question": "How do shortcut paths help signals reach the first layers of a very deep network?", "relevant": [{"file": "Lecture05_Neural_Networks.pptx", "page": 7}]},
+    {"id": "P07", "category": "paraphrase", "question": "When should I end training if my validation error begins to rise?", "relevant": [{"file": "Regularization_Study_Guide.md", "section": "Early Stopping"}, {"file": "Regularization_Study_Guide.md", "section": "Overfitting"}, {"file": "Lecture03_Gradient_Descent.pdf", "page": 6}]},
+    {"id": "P08", "category": "paraphrase", "question": "Why is computing the exact gradient over all my data so expensive?", "relevant": [{"file": "Lecture03_Gradient_Descent.pdf", "page": 4}]},
+    {"id": "P09", "category": "paraphrase", "question": "How costly is computing derivatives for every weight compared with running the network once?", "relevant": [{"file": "Lecture05_Neural_Networks.pptx", "page": 6}]},
+    {"id": "P10", "category": "paraphrase", "question": "My model memorizes the training set but fails on new examples. What is going on?", "relevant": [{"file": "Regularization_Study_Guide.md", "section": "Overfitting"}, {"file": "Lecture05_Neural_Networks.pptx", "page": 8}]},
+    {"id": "P11", "category": "paraphrase", "question": "How do I pick a sensible starting value for the step size?", "relevant": [{"file": "Lecture03_Gradient_Descent.pdf", "page": 3}, {"file": "Lecture03_Gradient_Descent.pdf", "page": 2}]},
+    {"id": "P12", "category": "paraphrase", "question": "Why can noisy updates from small random subsets of data actually help?", "relevant": [{"file": "Lecture03_Gradient_Descent.pdf", "page": 4}]},
+
+    {"id": "U01", "category": "unanswerable", "question": "What is the capital of France?", "relevant": []},
+    {"id": "U02", "category": "unanswerable", "question": "Explain how the Krebs cycle produces ATP.", "relevant": []},
+    {"id": "U03", "category": "unanswerable", "question": "Who won the 2018 FIFA World Cup?", "relevant": []},
+    {"id": "U04", "category": "unanswerable", "question": "How do I configure BGP route reflectors on a Cisco router?", "relevant": []},
+    {"id": "U05", "category": "unanswerable", "question": "What were the main causes of the French Revolution?", "relevant": []}
+  ]
+}

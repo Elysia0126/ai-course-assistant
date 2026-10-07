@@ -159,7 +159,7 @@ def search(
 ) -> SearchResponse:
     ensure_course_ready(db, course_id, payload.document_ids)
     result = HybridRetriever(db, settings, embedder).search(
-        course_id, payload.query, top_k=payload.top_k, document_ids=payload.document_ids
+        course_id, payload.query, top_k=payload.top_k, document_ids=payload.document_ids, mode=payload.mode
     )
     return SearchResponse(
         results=[SourceRef(**chunk.to_source(i)) for i, chunk in enumerate(result.chunks, start=1)],
