@@ -10,9 +10,10 @@ rankings without having to calibrate their very different score scales.
 
 import math
 import random
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from sqlalchemy import bindparam, select, text
@@ -22,6 +23,10 @@ from app.core.config import Settings
 from app.models import Chunk, Document, DocumentStatus
 from app.services.embeddings import EmbeddingProvider
 from app.services.text_utils import cjk_bigrams, tokenize, truncate
+
+SearchMode = Literal["hybrid", "vector", "keyword"]
+# One entry of a tsvector's text form: 'lexeme':3,17B  (quotes inside lexemes are doubled).
+_TSV_ENTRY = re.compile(r"'((?:[^']|'')+)':([0-9A-D,]+)")
 
 
 @dataclass
@@ -126,7 +131,9 @@ class HybridRetriever:
         *,
         top_k: int | None = None,
         document_ids: list[str] | None = None,
+        mode: SearchMode = "hybrid",
     ) -> RetrievalResult:
+        """Rank chunks for a query. ``mode`` exists for ablations: vector-only, keyword-only or fused."""
         top_k = top_k or self.settings.retrieval_top_k
         n_candidates = max(self.settings.retrieval_candidates, top_k)
         query_vec = self.embedder.embed_query(query)
@@ -140,9 +147,12 @@ class HybridRetriever:
                 course_id, query, query_vec, n_candidates, document_ids
             )
 
-        fused = reciprocal_rank_fusion(
-            [[cid for cid, _ in vector_hits], [cid for cid, _ in keyword_hits]], k=self.settings.rrf_k
-        )
+        rankings = {
+            "hybrid": [[cid for cid, _ in vector_hits], [cid for cid, _ in keyword_hits]],
+            "vector": [[cid for cid, _ in vector_hits]],
+            "keyword": [[cid for cid, _ in keyword_hits]],
+        }[mode]
+        fused = reciprocal_rank_fusion(rankings, k=self.settings.rrf_k)
         ranked_ids = sorted(fused, key=fused.__getitem__, reverse=True)[:top_k]
         vector_scores = dict(vector_hits)
         keyword_scores = dict(keyword_hits)
@@ -196,20 +206,84 @@ class HybridRetriever:
     def _keyword_search_pg(
         self, course_id: str, query: str, limit: int, document_ids: list[str] | None
     ) -> list[tuple[str, float]]:
-        # plainto_tsquery ANDs every term; questions read better as OR with coverage-aware ranking.
-        stmt = text(
-            "SELECT c.id, ts_rank_cd(c.content_tsv, q) AS score "
-            "FROM chunks c JOIN documents d ON d.id = c.document_id, "
-            "CAST(replace(CAST(plainto_tsquery('english', :query) AS text), '&', '|') AS tsquery) AS q "
-            "WHERE c.course_id = :course_id AND d.status = 'ready' AND c.content_tsv @@ q"
-            f"{self._filters(document_ids)} "
-            "ORDER BY score DESC LIMIT :limit"
+        """Okapi BM25 inside Postgres' full-text machinery.
+
+        ``ts_rank_cd`` has no IDF, so ubiquitous course words ("gradient", "training") swamp the rare
+        term a question is really about. Instead: (1) normalise the question with the same 'english'
+        configuration as the stored tsvector, (2) pull candidates through the GIN index with an OR query,
+        (3) get each term's document frequency with one index lookup per term, and (4) score candidates
+        with BM25 using term frequencies parsed from their tsvectors.
+        """
+        lexemes: list[str] = list(
+            self.session.scalars(
+                text("SELECT DISTINCT unnest(tsvector_to_array(to_tsvector('english', :q)))"), {"q": query}
+            )
         )
-        params: dict[str, Any] = {"query": query, "course_id": course_id, "limit": limit}
+        if not lexemes:
+            return []
+
+        scope = f"c.course_id = :course_id AND d.status = 'ready'{self._filters(document_ids)}"
+        base: dict[str, Any] = {"course_id": course_id}
         if document_ids:
-            params["document_ids"] = document_ids
-        rows = self.session.execute(self._bind(stmt, document_ids), params).all()
-        return [(row[0], float(row[1])) for row in rows]
+            base["document_ids"] = document_ids
+        # Lexemes are already normalised, so build the tsquery directly (no second stemming pass).
+        tsquery = " | ".join("'" + lx.replace("\\", "\\\\").replace("'", "''") + "'" for lx in lexemes)
+
+        candidates = self.session.execute(
+            self._bind(
+                text(
+                    "SELECT c.id, CAST(c.content_tsv AS text) FROM chunks c "
+                    "JOIN documents d ON d.id = c.document_id "
+                    f"WHERE {scope} AND c.content_tsv @@ CAST(:tsq AS tsquery) "
+                    "ORDER BY ts_rank_cd(c.content_tsv, CAST(:tsq AS tsquery)) DESC LIMIT :pool"
+                ),
+                document_ids,
+            ),
+            {**base, "tsq": tsquery, "pool": max(limit * 5, 200)},
+        ).all()
+        if not candidates:
+            return []
+
+        n_docs, avgdl = self.session.execute(
+            self._bind(
+                text(
+                    "SELECT count(*), coalesce(avg(length(c.content_tsv)), 0) FROM chunks c "
+                    f"JOIN documents d ON d.id = c.document_id WHERE {scope}"
+                ),
+                document_ids,
+            ),
+            base,
+        ).one()
+        doc_freq = dict(
+            self.session.execute(
+                self._bind(
+                    text(
+                        "SELECT x, (SELECT count(*) FROM chunks c JOIN documents d ON d.id = c.document_id "
+                        f"WHERE {scope} AND c.content_tsv @@ CAST(quote_literal(x) AS tsquery)) "
+                        "FROM unnest(CAST(:lexemes AS text[])) AS x"
+                    ),
+                    document_ids,
+                ),
+                {**base, "lexemes": lexemes},
+            ).all()
+        )
+
+        k1, b = 1.5, 0.75
+        avgdl = float(avgdl) or 1.0
+        idf = {lx: math.log(1 + (n_docs - df + 0.5) / (df + 0.5)) for lx, df in doc_freq.items()}
+        scored: list[tuple[str, float]] = []
+        for chunk_id, tsv in candidates:
+            freqs = {m.group(1).replace("''", "'"): m.group(2).count(",") + 1 for m in _TSV_ENTRY.finditer(tsv)}
+            length = len(freqs)
+            score = 0.0
+            for lx in lexemes:
+                tf = freqs.get(lx)
+                if tf:
+                    score += idf.get(lx, 0.0) * tf * (k1 + 1) / (tf + k1 * (1 - b + b * length / avgdl))
+            if score > 0:
+                scored.append((chunk_id, score))
+        scored.sort(key=lambda item: item[1], reverse=True)
+        return scored[:limit]
 
     def _load_chunks(self, chunk_ids: list[str]) -> dict[str, RetrievedChunk]:
         if not chunk_ids:

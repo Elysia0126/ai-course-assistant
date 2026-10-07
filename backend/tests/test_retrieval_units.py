@@ -6,7 +6,7 @@ from app.services.chat import extract_citations
 from app.services.embeddings import HashEmbeddingProvider
 from app.services.llm.openai_backend import extract_json_object
 from app.services.quizzes import grade_short_answer
-from app.services.retrieval import BM25, reciprocal_rank_fusion
+from app.services.retrieval import _TSV_ENTRY, BM25, reciprocal_rank_fusion
 from app.services.srs import ReviewState, schedule
 from app.services.text_utils import tokenize
 
@@ -22,6 +22,12 @@ def test_bm25_prefers_documents_with_rare_query_terms() -> None:
     scores = BM25(corpus).scores(tokenize("what does dropout do"))
     assert int(np.argmax(scores)) == 1
     assert scores[0] == 0
+
+
+def test_tsvector_text_parsing_for_bm25() -> None:
+    tsv = "'adam':12,30B 'default':15 'o''neil':3 'rate':7,8,9"
+    freqs = {m.group(1).replace("''", "'"): m.group(2).count(",") + 1 for m in _TSV_ENTRY.finditer(tsv)}
+    assert freqs == {"adam": 2, "default": 1, "o'neil": 1, "rate": 3}
 
 
 def test_rrf_rewards_items_ranked_well_by_both_retrievers() -> None:
