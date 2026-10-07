@@ -168,6 +168,46 @@ def test_openai_gives_up_after_repeated_invalid_output() -> None:
         backend.generate_flashcards(course_name="ML", sources=[SOURCE], num_cards=1, topic=None)
 
 
+class FakeEmbeddings:
+    def __init__(self, dim: int):
+        self.dim = dim
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any):
+        self.calls.append(kwargs)
+        n = len(kwargs["input"])
+        # Return rows out of order to check the provider re-sorts by index.
+        rows = [SimpleNamespace(index=i, embedding=[float(i + 1)] + [0.0] * (self.dim - 1)) for i in range(n)]
+        return SimpleNamespace(data=list(reversed(rows)))
+
+
+def test_openai_embeddings_shorten_sort_and_normalise() -> None:
+    from app.services.embeddings import OpenAIEmbeddingProvider
+
+    provider = OpenAIEmbeddingProvider(
+        Settings(openai_api_key="k", embedding_model="text-embedding-3-small", embedding_dim=4, embedding_batch_size=2)
+    )
+    fake = FakeEmbeddings(dim=4)
+    provider.client = SimpleNamespace(embeddings=fake)  # type: ignore[assignment]
+    vectors = provider.embed_documents(["a", "b", "c"])
+    assert vectors.shape == (3, 4)
+    assert fake.calls[0]["dimensions"] == 4  # text-embedding-3 models are shortened server-side
+    assert [round(float(v[0]), 3) for v in vectors] == [1.0, 1.0, 1.0]  # normalised
+    assert provider.embed_query("q").shape == (4,)
+
+
+def test_openai_embeddings_reject_wrong_dimension() -> None:
+    from app.core.errors import ConfigurationError
+    from app.services.embeddings import OpenAIEmbeddingProvider
+
+    provider = OpenAIEmbeddingProvider(Settings(openai_api_key="k", embedding_model="custom-embed", embedding_dim=8))
+    fake = FakeEmbeddings(dim=4)
+    provider.client = SimpleNamespace(embeddings=fake)  # type: ignore[assignment]
+    with pytest.raises(ConfigurationError, match="EMBEDDING_DIM=8"):
+        provider.embed_documents(["a"])
+    assert "dimensions" not in fake.calls[0]  # only text-embedding-3 supports shortening
+
+
 def test_offline_answer_prefers_specific_self_contained_sentences() -> None:
     sources = [
         RetrievedChunk(

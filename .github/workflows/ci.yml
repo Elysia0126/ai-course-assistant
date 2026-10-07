@@ -37,9 +37,9 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - name: Tests on SQLite (hash embeddings, offline generator)
-        run: pytest
-      - name: Tests on PostgreSQL + pgvector (HNSW + full-text search)
-        run: pytest
+        run: pytest --cov=app --cov-report=
+      - name: Tests on PostgreSQL + pgvector (HNSW + BM25 over full-text search) + combined coverage
+        run: pytest --cov=app --cov-append --cov-report=term --cov-fail-under=85
         env:
           TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/course_assistant_test
       - name: Retrieval evaluation (regression gate)
