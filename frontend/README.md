@@ -5,7 +5,7 @@ See the [project README](../README.md) for the full setup, architecture and API 
 
 ```bash
 npm install
-cp .env.example .env.local   # NEXT_PUBLIC_API_URL=http://localhost:8000
+cp .env.example .env.local   # BACKEND_URL=http://127.0.0.1:8000 (read by the /api proxy at runtime)
 npm run dev                  # http://localhost:3000
 ```
 
@@ -21,6 +21,7 @@ npm run dev                  # http://localhost:3000
 src/
 ├── app/                       # routes
 │   ├── page.tsx               # course dashboard
+│   ├── api/[...path]/         # same-origin proxy to FastAPI (streams uploads + SSE, CSRF check, service token)
 │   └── courses/[courseId]/    # layout (tabs) + materials · ask · quiz · flashcards
 ├── components/                # UI primitives, markdown + citation chips, source cards…
 └── lib/                       # typed API client, SSE parser, citation + SM-2 helpers
