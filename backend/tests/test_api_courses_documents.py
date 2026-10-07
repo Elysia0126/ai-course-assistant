@@ -8,7 +8,19 @@ def test_health_reports_providers(client: TestClient) -> None:
     body = client.get("/api/health").json()
     assert body["status"] == "ok"
     assert body["llm"]["provider"] == "offline"
-    assert body["embeddings"] == {"provider": "hash", "model": "feature-hash-384", "dim": 384}
+    assert body["embeddings"] == {
+        "provider": "hash",
+        "model": "feature-hash-384",
+        "dim": 384,
+        "signature": "hash:feature-hash-384:384",
+    }
+
+
+def test_security_headers(client: TestClient) -> None:
+    headers = client.get("/api/health").headers
+    assert headers["x-content-type-options"] == "nosniff"
+    assert headers["x-frame-options"] == "DENY"
+    assert headers["x-request-id"]
 
 
 def test_course_crud_and_validation(client: TestClient) -> None:

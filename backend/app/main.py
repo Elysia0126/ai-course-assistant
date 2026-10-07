@@ -81,6 +81,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         started = time.perf_counter()
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
+        # Basic hardening: no MIME sniffing of uploads, no framing, no referrer leakage.
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
         if request.url.path != "/api/health":
             logger.info(
                 "%s %s -> %s (%.0f ms) [%s]",

@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from app import __version__
 from app.api.deps import DbSession, EmbedderDep, LLMDep, SettingsDep
+from app.services.embeddings import embedding_signature
 
 router = APIRouter(tags=["system"])
 
@@ -22,6 +23,11 @@ def health(db: DbSession, settings: SettingsDep, embedder: EmbedderDep, llm: LLM
         "database": {"status": database, "dialect": db.get_bind().dialect.name},
         "vector_store": "pgvector" if settings.is_postgres else "in-process (numpy + BM25)",
         "llm": {"provider": llm.name, "model": llm.model},
-        "embeddings": {"provider": embedder.name, "model": embedder.model, "dim": embedder.dim},
+        "embeddings": {
+            "provider": embedder.name,
+            "model": embedder.model,
+            "dim": embedder.dim,
+            "signature": embedding_signature(embedder),
+        },
         "limits": {"max_upload_mb": settings.max_upload_mb},
     }

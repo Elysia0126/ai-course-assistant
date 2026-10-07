@@ -17,6 +17,9 @@ class DocumentOut(ORMModel):
     chunk_count: int
     created_at: datetime
     processed_at: datetime | None
+    embedding_signature: str | None = None
+    # True when the document was indexed with a different embedding model than the one now configured.
+    needs_reindex: bool = False
 
 
 class UploadError(BaseModel):
@@ -37,3 +40,9 @@ class ChunkOut(ORMModel):
     page_number: int | None
     section: str | None
     char_count: int
+
+
+class ChunkDetail(ChunkOut):
+    document_id: str
+    filename: str = ""
+    file_type: str = ""

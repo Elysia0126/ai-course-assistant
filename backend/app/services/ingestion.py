@@ -18,7 +18,7 @@ from app.db.session import session_scope
 from app.db.types import utcnow
 from app.models import Chunk, Document, DocumentStatus
 from app.services.chunking import chunk_document
-from app.services.embeddings import EmbeddingProvider
+from app.services.embeddings import EmbeddingProvider, embedding_signature
 from app.services.parsing import parse_document
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,12 @@ def ingest_document(
         session.commit()
 
         try:
-            parsed = parse_document(Path(document.storage_path), document.file_type)
+            parsed = parse_document(
+                Path(document.storage_path),
+                document.file_type,
+                max_pages=settings.max_pages,
+                max_chars=settings.max_document_chars,
+            )
             drafts = chunk_document(parsed, settings.chunk_size, settings.chunk_overlap)
             if not drafts:
                 raise AppError("The document did not contain enough text to index.", code="document_parsing_failed")
@@ -73,6 +78,7 @@ def ingest_document(
             )
             document.page_count = parsed.page_count
             document.chunk_count = len(drafts)
+            document.embedding_signature = embedding_signature(embedder)
             document.status = DocumentStatus.READY
             document.processed_at = utcnow()
             session.commit()

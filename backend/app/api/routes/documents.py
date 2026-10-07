@@ -3,12 +3,14 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, File, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import DbSession, EmbedderDep, SessionFactoryDep, SettingsDep, get_course_or_404
 from app.core.errors import AppError, ConflictError, NotFoundError
 from app.models import Chunk, Document, DocumentStatus
-from app.schemas.document import ChunkOut, DocumentOut, UploadError, UploadResult
+from app.schemas.document import ChunkDetail, ChunkOut, DocumentOut, UploadError, UploadResult
 from app.services.documents import delete_document_file, read_and_validate, store_document
+from app.services.embeddings import embedding_signature
 from app.services.ingestion import ingest_document
 
 router = APIRouter(tags=["documents"])
@@ -22,12 +24,47 @@ def _get_document(db: DbSession, document_id: str) -> Document:
     return document
 
 
+def _out(document: Document, signature: str) -> DocumentOut:
+    out = DocumentOut.model_validate(document)
+    out.needs_reindex = document.status == DocumentStatus.READY and document.embedding_signature != signature
+    return out
+
+
 @router.get("/courses/{course_id}/documents", response_model=list[DocumentOut], summary="List course materials")
-def list_documents(course_id: str, db: DbSession) -> list[Document]:
+def list_documents(course_id: str, db: DbSession, embedder: EmbedderDep) -> list[DocumentOut]:
     get_course_or_404(db, course_id)
-    return list(
-        db.scalars(select(Document).where(Document.course_id == course_id).order_by(Document.created_at.desc()))
+    signature = embedding_signature(embedder)
+    documents = db.scalars(select(Document).where(Document.course_id == course_id).order_by(Document.created_at.desc()))
+    return [_out(d, signature) for d in documents]
+
+
+@router.post(
+    "/courses/{course_id}/reindex",
+    response_model=list[DocumentOut],
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Re-index every document in a course (e.g. after changing the embedding model)",
+)
+def reindex_course(
+    course_id: str,
+    background_tasks: BackgroundTasks,
+    db: DbSession,
+    settings: SettingsDep,
+    session_factory: SessionFactoryDep,
+    embedder: EmbedderDep,
+) -> list[DocumentOut]:
+    get_course_or_404(db, course_id)
+    documents = list(
+        db.scalars(
+            select(Document).where(Document.course_id == course_id, Document.status != DocumentStatus.PROCESSING)
+        )
     )
+    for document in documents:
+        document.status = DocumentStatus.PENDING
+        document.error_message = None
+    db.commit()
+    for document in documents:
+        background_tasks.add_task(ingest_document, session_factory, settings, embedder, document.id)
+    return [_out(d, embedding_signature(embedder)) for d in documents]
 
 
 @router.post(
@@ -58,10 +95,18 @@ async def upload_documents(
             validated = await read_and_validate(upload, settings)
             if any(d.sha256 == validated.sha256 for d in created):
                 raise ConflictError(f"'{validated.filename}' was included twice.", code="duplicate_document")
-            created.append(store_document(db, settings, course_id, validated))
+            try:
+                document = store_document(db, settings, course_id, validated)
+                db.commit()  # per file, so one failure can't roll back the others
+            except IntegrityError as exc:
+                # Two concurrent uploads of the same file: the unique constraint is the final arbiter.
+                db.rollback()
+                raise ConflictError(
+                    f"'{validated.filename}' has already been uploaded to this course.", code="duplicate_document"
+                ) from exc
+            created.append(document)
         except AppError as exc:
             errors.append((exc, upload.filename or "upload"))
-    db.commit()
 
     if not created and errors:
         if len(errors) == 1:
@@ -75,14 +120,25 @@ async def upload_documents(
     for document in created:
         background_tasks.add_task(ingest_document, session_factory, settings, embedder, document.id)
     return UploadResult(
-        documents=[DocumentOut.model_validate(d) for d in created],
+        documents=[_out(d, embedding_signature(embedder)) for d in created],
         errors=[UploadError(filename=name, code=e.code, message=e.message) for e, name in errors],
     )
 
 
 @router.get("/documents/{document_id}", response_model=DocumentOut, summary="Get document status")
-def get_document(document_id: str, db: DbSession) -> Document:
-    return _get_document(db, document_id)
+def get_document(document_id: str, db: DbSession, embedder: EmbedderDep) -> DocumentOut:
+    return _out(_get_document(db, document_id), embedding_signature(embedder))
+
+
+@router.get("/chunks/{chunk_id}", response_model=ChunkDetail, summary="Full text of one indexed passage")
+def get_chunk(chunk_id: str, db: DbSession) -> ChunkDetail:
+    chunk = db.get(Chunk, chunk_id)
+    if chunk is None:
+        raise NotFoundError("This passage no longer exists — the document may have been re-indexed or deleted.")
+    detail = ChunkDetail.model_validate(chunk)
+    detail.filename = chunk.document.filename
+    detail.file_type = chunk.document.file_type
+    return detail
 
 
 @router.get("/documents/{document_id}/file", summary="Download/view the original file")

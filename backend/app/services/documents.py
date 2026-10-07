@@ -1,7 +1,9 @@
 """Upload validation and file storage."""
 
 import hashlib
+import io
 import shutil
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -58,8 +60,17 @@ async def read_and_validate(upload: UploadFile, settings: Settings) -> Validated
     # Cheap content sniffing catches renamed files before the parser chokes on them.
     if file_type == "pdf" and not data[:1024].lstrip().startswith(b"%PDF"):
         raise UnsupportedFileError(f"'{filename}' does not look like a valid PDF.")
-    if file_type in {"pptx", "docx"} and not data.startswith(_ZIP_MAGIC):
-        raise UnsupportedFileError(f"'{filename}' does not look like a valid .{file_type} file.")
+    if file_type in {"pptx", "docx"}:
+        if not data.startswith(_ZIP_MAGIC):
+            raise UnsupportedFileError(f"'{filename}' does not look like a valid .{file_type} file.")
+        # Office files are zip archives; refuse "zip bombs" that inflate far beyond their upload size.
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                expanded = sum(info.file_size for info in archive.infolist())
+        except zipfile.BadZipFile as exc:
+            raise UnsupportedFileError(f"'{filename}' is not a readable .{file_type} file.") from exc
+        if expanded > settings.max_unzipped_mb * 1024 * 1024:
+            raise FileTooLargeError(f"'{filename}' expands to more than {settings.max_unzipped_mb} MB.")
 
     return ValidatedUpload(
         filename=filename,

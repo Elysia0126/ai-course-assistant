@@ -37,6 +37,11 @@ class EmbeddingProvider(Protocol):
     def embed_query(self, text: str) -> np.ndarray: ...
 
 
+def embedding_signature(embedder: EmbeddingProvider) -> str:
+    """Identifies the vector space: vectors are only comparable when provider, model and size all match."""
+    return f"{embedder.name}:{embedder.model}:{embedder.dim}"
+
+
 def _normalize_rows(matrix: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     norms[norms == 0] = 1.0

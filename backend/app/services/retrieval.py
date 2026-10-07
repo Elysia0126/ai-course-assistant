@@ -16,12 +16,13 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import numpy as np
-from sqlalchemy import bindparam, select, text
+from sqlalchemy import bindparam, func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.core.errors import ConflictError
 from app.models import Chunk, Document, DocumentStatus
-from app.services.embeddings import EmbeddingProvider
+from app.services.embeddings import EmbeddingProvider, embedding_signature
 from app.services.text_utils import cjk_bigrams, tokenize, truncate
 
 SearchMode = Literal["hybrid", "vector", "keyword"]
@@ -117,6 +118,24 @@ def _keyword_tokens(text_: str) -> list[str]:
     return tokens + cjk_bigrams(tokens)
 
 
+def check_index_current(session: Session, course_id: str, document_ids: list[str] | None, signature: str) -> None:
+    """Refuse to search vectors produced by a different embedding model than the one configured now."""
+    stmt = select(func.count(Document.id)).where(
+        Document.course_id == course_id,
+        Document.status == DocumentStatus.READY,
+        Document.embedding_signature.is_distinct_from(signature),
+    )
+    if document_ids:
+        stmt = stmt.where(Document.id.in_(document_ids))
+    stale = session.scalar(stmt)
+    if stale:
+        raise ConflictError(
+            f"{stale} document(s) were indexed with a different embedding model than the one now configured. "
+            "Re-index the course materials (Materials → Re-index all) before searching.",
+            code="index_outdated",
+        )
+
+
 class HybridRetriever:
     def __init__(self, session: Session, settings: Settings, embedder: EmbeddingProvider):
         self.session = session
@@ -134,6 +153,7 @@ class HybridRetriever:
         mode: SearchMode = "hybrid",
     ) -> RetrievalResult:
         """Rank chunks for a query. ``mode`` exists for ablations: vector-only, keyword-only or fused."""
+        check_index_current(self.session, course_id, document_ids, embedding_signature(self.embedder))
         top_k = top_k or self.settings.retrieval_top_k
         n_candidates = max(self.settings.retrieval_candidates, top_k)
         query_vec = self.embedder.embed_query(query)

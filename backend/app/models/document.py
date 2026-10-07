@@ -37,6 +37,9 @@ class Document(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     page_count: Mapped[int | None] = mapped_column(Integer)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Which embedding model produced this document's vectors ("provider:model:dim"). Vectors from different
+    # models live in different spaces, so retrieval refuses to mix them until the document is re-indexed.
+    embedding_signature: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     processed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
 

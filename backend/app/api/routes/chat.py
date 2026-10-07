@@ -19,6 +19,7 @@ from app.schemas.chat import (
 )
 from app.schemas.common import SourceRef
 from app.services.chat import ChatEvent, ensure_course_ready, resolve_session, run_chat
+from app.services.embeddings import embedding_signature
 from app.services.retrieval import HybridRetriever
 
 router = APIRouter(tags=["chat"])
@@ -44,7 +45,7 @@ def chat_stream(
     llm: LLMDep,
 ) -> StreamingResponse:
     # Validate up front so client errors get real HTTP status codes rather than a stream error event.
-    ensure_course_ready(db, course_id, payload.document_ids)
+    ensure_course_ready(db, course_id, payload.document_ids, embedding_signature(embedder))
     resolve_session(db, course_id, payload.session_id)
     db.close()
 
@@ -157,7 +158,7 @@ def delete_session(session_id: str, db: DbSession) -> Response:
 def search(
     course_id: str, payload: SearchRequest, db: DbSession, settings: SettingsDep, embedder: EmbedderDep
 ) -> SearchResponse:
-    ensure_course_ready(db, course_id, payload.document_ids)
+    ensure_course_ready(db, course_id, payload.document_ids, embedding_signature(embedder))
     result = HybridRetriever(db, settings, embedder).search(
         course_id, payload.query, top_k=payload.top_k, document_ids=payload.document_ids, mode=payload.mode
     )

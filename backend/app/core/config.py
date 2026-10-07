@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     auto_migrate: bool = True
     upload_dir: Path = BACKEND_DIR / "data" / "uploads"
     max_upload_mb: int = 25
+    # Guards against pathological uploads (huge decks, zip bombs, text dumps).
+    max_pages: int = 500
+    max_document_chars: int = 2_000_000
+    max_unzipped_mb: int = 200
 
     # --- LLM -------------------------------------------------------------------
     # "auto" picks anthropic if ANTHROPIC_API_KEY is set, then openai if

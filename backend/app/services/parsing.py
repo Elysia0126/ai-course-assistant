@@ -6,8 +6,10 @@ answers can cite "Lecture 3.pdf, p. 4" instead of just a file name.
 
 import logging
 import re
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from app.core.errors import DocumentParsingError
 from app.services.text_utils import clean_whitespace, reflow_lines
@@ -47,13 +49,15 @@ def file_type_for(filename: str) -> str:
     return "md" if suffix == ".markdown" else suffix.lstrip(".")
 
 
-def parse_document(path: Path, file_type: str) -> ParsedDocument:
+def parse_document(
+    path: Path, file_type: str, *, max_pages: int | None = None, max_chars: int | None = None
+) -> ParsedDocument:
     parsers = {"pdf": parse_pdf, "pptx": parse_pptx, "docx": parse_docx, "md": parse_markdown, "txt": parse_text}
     parser = parsers.get(file_type)
     if parser is None:
         raise DocumentParsingError(f"No parser available for .{file_type} files.")
     try:
-        parsed = parser(path)
+        parsed = parser(path, max_pages=max_pages) if file_type in {"pdf", "pptx"} else parser(path)
     except DocumentParsingError:
         raise
     except Exception as exc:  # corrupt files surface as library-specific exceptions
@@ -66,10 +70,19 @@ def parse_document(path: Path, file_type: str) -> ParsedDocument:
     if not parsed.sections:
         hint = " It may be a scanned PDF (images only); OCR is not supported yet." if file_type == "pdf" else ""
         raise DocumentParsingError(f"No extractable text was found in this file.{hint}")
+    if max_chars and parsed.total_chars > max_chars:
+        raise DocumentParsingError(
+            f"This file contains more than {max_chars:,} characters of text. Split it into smaller documents."
+        )
     return parsed
 
 
-def parse_pdf(path: Path) -> ParsedDocument:
+def _check_page_limit(count: int, max_pages: int | None, unit: str) -> None:
+    if max_pages and count > max_pages:
+        raise DocumentParsingError(f"This file has {count} {unit}; the limit is {max_pages}. Split it and retry.")
+
+
+def parse_pdf(path: Path, max_pages: int | None = None) -> ParsedDocument:
     from pypdf import PdfReader
 
     reader = PdfReader(str(path))
@@ -78,6 +91,7 @@ def parse_pdf(path: Path) -> ParsedDocument:
             reader.decrypt("")
         except Exception as exc:
             raise DocumentParsingError("This PDF is password-protected.") from exc
+    _check_page_limit(len(reader.pages), max_pages, "pages")
 
     sections: list[ParsedSection] = []
     for index, page in enumerate(reader.pages, start=1):
@@ -92,29 +106,36 @@ def parse_pdf(path: Path) -> ParsedDocument:
     return ParsedDocument(sections=sections, page_count=len(reader.pages))
 
 
-def parse_pptx(path: Path) -> ParsedDocument:
+def _shape_lines(shapes: Iterable[Any], skip: Any) -> Iterator[str]:
+    """Text from slide shapes, recursing into grouped shapes (common in real lecture decks)."""
+    for shape in shapes:
+        if shape == skip:
+            continue
+        if getattr(shape, "shape_type", None) == 6 and hasattr(shape, "shapes"):  # MSO_SHAPE_TYPE.GROUP
+            yield from _shape_lines(shape.shapes, skip)
+            continue
+        if shape.has_text_frame:
+            for paragraph in shape.text_frame.paragraphs:
+                line = "".join(run.text for run in paragraph.runs).strip()
+                if line:
+                    yield ("  " * paragraph.level) + "- " + line if paragraph.level else line
+        if getattr(shape, "has_table", False) and shape.has_table:
+            for row in shape.table.rows:
+                yield " | ".join(cell.text.strip() for cell in row.cells)
+
+
+def parse_pptx(path: Path, max_pages: int | None = None) -> ParsedDocument:
     from pptx import Presentation
 
     presentation = Presentation(str(path))
+    _check_page_limit(len(presentation.slides), max_pages, "slides")
     sections: list[ParsedSection] = []
     for index, slide in enumerate(presentation.slides, start=1):
         title = None
         if slide.shapes.title is not None and slide.shapes.title.has_text_frame:
             title = slide.shapes.title.text_frame.text.strip() or None
 
-        lines: list[str] = []
-        for shape in slide.shapes:
-            if shape == slide.shapes.title:
-                continue
-            if shape.has_text_frame:
-                for paragraph in shape.text_frame.paragraphs:
-                    line = "".join(run.text for run in paragraph.runs).strip()
-                    if line:
-                        lines.append(("  " * paragraph.level) + "- " + line if paragraph.level else line)
-            if getattr(shape, "has_table", False) and shape.has_table:
-                for row in shape.table.rows:
-                    cells = [cell.text.strip() for cell in row.cells]
-                    lines.append(" | ".join(cells))
+        lines = list(_shape_lines(slide.shapes, skip=slide.shapes.title))
 
         if slide.has_notes_slide and slide.notes_slide.notes_text_frame is not None:
             notes = slide.notes_slide.notes_text_frame.text.strip()
