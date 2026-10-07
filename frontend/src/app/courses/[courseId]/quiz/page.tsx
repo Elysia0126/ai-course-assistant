@@ -77,7 +77,7 @@ export default function QuizPage() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
       <QuizGenerator
         onCreated={(quiz) => {
           setActive(quiz);
@@ -102,7 +102,7 @@ export default function QuizPage() {
         ) : (
           <ul className="divide-y divide-slate-100">
             {quizzes.map((quiz) => (
-              <li key={quiz.id} className="group flex items-center gap-4 px-5 py-4">
+              <li key={quiz.id} className="group flex items-center gap-3 px-4 py-4 sm:gap-4 sm:px-5">
                 <button onClick={() => open(quiz.id)} className="min-w-0 flex-1 text-left">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-medium text-slate-900 group-hover:text-indigo-700">{quiz.title}</p>

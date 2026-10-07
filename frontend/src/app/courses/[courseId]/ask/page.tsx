@@ -178,7 +178,7 @@ export default function AskPage() {
   const noMaterials = readyDocuments.length === 0;
 
   return (
-    <div className="grid h-[calc(100dvh-14rem)] min-h-[540px] gap-4 lg:grid-cols-[260px_1fr]">
+    <div className="grid h-[calc(100dvh-14rem)] min-h-[540px] grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
       <Card className="hidden flex-col overflow-hidden lg:flex">
         <div className="border-b border-slate-100 p-3">
           <Button variant="outline" className="w-full" icon={<MessageSquarePlus className="h-4 w-4" />} onClick={newChat}>
@@ -344,7 +344,7 @@ function AssistantMessage({ message }: { message: UIMessage }) {
             <p className="mb-2 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
               {done && cited.length ? "Cited sources" : "Retrieved sources"}
             </p>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {(showAll ? [...visible, ...(done && cited.length ? others : [])] : visible).map((s) => (
                 <SourceCard key={`${s.chunk_id}-${s.index}`} id={`src-${message.id}-${s.index}`} source={s} />
               ))}

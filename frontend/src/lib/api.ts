@@ -4,6 +4,7 @@ import type {
   ChatSessionDetail,
   ChatSessionSummary,
   Chunk,
+  ChunkDetail,
   Course,
   CourseDocument,
   CourseInput,
@@ -17,6 +18,7 @@ import type {
   QuizDetail,
   QuizSummary,
   Rating,
+  SearchMode,
   SearchResponse,
   SourceRef,
   UploadResult,
@@ -171,7 +173,11 @@ export const api = {
     update: (id: string, input: Partial<CourseInput>) =>
       request<Course>(`/courses/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
     remove: (id: string) => request<void>(`/courses/${id}`, { method: "DELETE" }),
+    reindex: (id: string) => request<CourseDocument[]>(`/courses/${id}/reindex`, { method: "POST" }),
+    demo: () => request<Course>("/demo", { method: "POST" }),
   },
+
+  chunk: (id: string) => request<ChunkDetail>(`/chunks/${id}`),
 
   documents: {
     list: (courseId: string) => request<CourseDocument[]>(`/courses/${courseId}/documents`),
@@ -184,8 +190,8 @@ export const api = {
       `${API_URL}/api/documents/${id}/file${page ? `#page=${page}` : ""}`,
   },
 
-  search: (courseId: string, query: string, documentIds?: string[] | null) =>
-    request<SearchResponse>(`/courses/${courseId}/search`, json({ query, top_k: 8, document_ids: documentIds })),
+  search: (courseId: string, query: string, mode: SearchMode = "hybrid", documentIds?: string[] | null) =>
+    request<SearchResponse>(`/courses/${courseId}/search`, json({ query, top_k: 8, mode, document_ids: documentIds })),
 
   chat: {
     stream: streamChat,

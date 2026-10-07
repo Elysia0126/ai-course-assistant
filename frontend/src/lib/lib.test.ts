@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { citationNumber, citedNumbers, linkCitations } from "./citations";
+import { deckToAnkiText, slugify } from "./export";
 import { formatBytes, sourceLabel, timeAgo } from "./format";
 import { formatInterval, nextIntervalDays } from "./srs";
 import { SSEParser } from "./sse";
@@ -55,6 +56,27 @@ describe("SM-2 preview", () => {
     expect(formatInterval(0.5)).toBe("12h");
     expect(formatInterval(6)).toBe("6d");
     expect(formatInterval(90)).toBe("3mo");
+  });
+});
+
+describe("Anki export", () => {
+  it("writes tab-separated notes with Anki header directives and flattened fields", () => {
+    const text = deckToAnkiText(
+      [
+        { front: "What is dropout?", back: "Randomly zeroes\tactivations\nduring training." },
+        { front: "Adam β1?", back: "0.9" },
+      ],
+      "ML101",
+    );
+    expect(text.split("\n")).toEqual([
+      "#separator:tab",
+      "#html:false",
+      "#tags column:3",
+      "What is dropout?\tRandomly zeroes activations during training.\tML101",
+      "Adam β1?\t0.9\tML101",
+      "",
+    ]);
+    expect(slugify("Key concepts — Lecture 3!")).toBe("key-concepts-lecture-3");
   });
 });
 

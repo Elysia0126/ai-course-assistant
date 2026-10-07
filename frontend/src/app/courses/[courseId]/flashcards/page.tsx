@@ -1,6 +1,17 @@
 "use client";
 
-import { ArrowLeft, BookOpenCheck, Brain, Eye, Layers, PartyPopper, RotateCcw, Sparkles, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpenCheck,
+  Brain,
+  Download,
+  Eye,
+  Layers,
+  PartyPopper,
+  RotateCcw,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -10,6 +21,7 @@ import { Markdown } from "@/components/markdown";
 import { SourceCard } from "@/components/source-card";
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, ProgressBar, Spinner } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
+import { deckToAnkiText, downloadText, slugify } from "@/lib/export";
 import { cn, timeAgo } from "@/lib/format";
 import { formatInterval, nextIntervalDays } from "@/lib/srs";
 import type { DeckDetail, DeckSummary, Flashcard, Rating } from "@/lib/types";
@@ -54,7 +66,7 @@ export default function FlashcardsPage() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
       <DeckGenerator
         onCreated={() => {
           load();
@@ -119,6 +131,23 @@ export default function FlashcardsPage() {
                     }
                   >
                     <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    title="Export for Anki (tab-separated text)"
+                    aria-label="Export for Anki"
+                    onClick={() =>
+                      api.decks
+                        .get(deck.id)
+                        .then((full) => {
+                          downloadText(`${slugify(full.title)}.txt`, deckToAnkiText(full.cards, slugify(course.code || course.name)));
+                          toast.success("Exported — import the file in Anki via File → Import");
+                        })
+                        .catch((e) => toast.error(errorMessage(e)))
+                    }
+                  >
+                    <Download className="h-4 w-4" />
                   </Button>
                   <Button
                     size="icon"

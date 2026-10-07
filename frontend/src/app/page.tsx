@@ -1,7 +1,19 @@
 "use client";
 
-import { BookOpen, Brain, FileText, Layers, ListChecks, MessageSquareText, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  Brain,
+  FileText,
+  FlaskConical,
+  Layers,
+  ListChecks,
+  MessageSquareText,
+  Plus,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -15,6 +27,19 @@ export default function DashboardPage() {
   const [courses, setCourses] = useState<Course[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [loadingDemo, setLoadingDemo] = useState(false);
+  const router = useRouter();
+
+  async function openDemo() {
+    setLoadingDemo(true);
+    try {
+      const course = await api.courses.demo();
+      router.push(`/courses/${course.id}/materials`);
+    } catch (e) {
+      toast.error(errorMessage(e));
+      setLoadingDemo(false);
+    }
+  }
 
   const load = useCallback(() => {
     api.courses
@@ -68,11 +93,16 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-slate-900">Your courses</h2>
-        <Button onClick={() => setCreating(true)} icon={<Plus className="h-4 w-4" />}>
-          New course
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" loading={loadingDemo} onClick={openDemo} icon={<FlaskConical className="h-4 w-4" />}>
+            Demo course
+          </Button>
+          <Button onClick={() => setCreating(true)} icon={<Plus className="h-4 w-4" />}>
+            New course
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -95,11 +125,16 @@ export default function DashboardPage() {
           <EmptyState
             icon={<BookOpen className="h-6 w-6" />}
             title="Create your first course"
-            description="A course groups lecture slides, PDFs and notes. Everything you ask or practise is grounded in what you upload."
+            description="A course groups lecture slides, PDFs and notes. Everything you ask or practise is grounded in what you upload. Or explore a ready-made sample course first."
             action={
-              <Button onClick={() => setCreating(true)} icon={<Plus className="h-4 w-4" />}>
-                New course
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button onClick={openDemo} loading={loadingDemo} icon={<FlaskConical className="h-4 w-4" />}>
+                  Try the demo course
+                </Button>
+                <Button variant="outline" onClick={() => setCreating(true)} icon={<Plus className="h-4 w-4" />}>
+                  New course
+                </Button>
+              </div>
             }
           />
         </Card>

@@ -2,6 +2,7 @@
 
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Eye,
   FileSearch,
@@ -16,20 +17,47 @@ import { toast } from "sonner";
 
 import { useCourse } from "@/components/course-context";
 import { FileIcon } from "@/components/file-icon";
-import { Badge, Button, Card, EmptyState, Input, Modal, ProgressBar, Spinner } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Input, Modal, ProgressBar, Segmented, Spinner } from "@/components/ui";
 import { api, errorMessage } from "@/lib/api";
 import { cn, formatBytes, sourceLabel, timeAgo } from "@/lib/format";
-import type { Chunk, CourseDocument, SearchResponse } from "@/lib/types";
+import type { Chunk, CourseDocument, SearchMode, SearchResponse } from "@/lib/types";
 
 const ACCEPT = ".pdf,.pptx,.docx,.md,.markdown,.txt";
 
 export default function MaterialsPage() {
   const { course, documents, refreshDocuments, refreshCourse } = useCourse();
   const [inspecting, setInspecting] = useState<CourseDocument | null>(null);
+  const [reindexing, setReindexing] = useState(false);
+  const stale = documents.filter((d) => d.needs_reindex).length;
+
+  async function reindexAll() {
+    setReindexing(true);
+    try {
+      await api.courses.reindex(course.id);
+      toast.success("Re-indexing all materials…");
+      await refreshDocuments();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setReindexing(false);
+    }
+  }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-      <div className="space-y-6">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="min-w-0 space-y-6">
+        {stale > 0 && (
+          <div className="flex flex-col gap-3 rounded-2xl bg-amber-50 px-5 py-4 text-sm text-amber-900 ring-1 ring-amber-200 sm:flex-row sm:items-center">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <p className="flex-1">
+              {stale} document{stale > 1 ? "s were" : " was"} indexed with a different embedding model than the one now
+              configured. Search is paused for them until they are re-indexed.
+            </p>
+            <Button size="sm" variant="secondary" loading={reindexing} onClick={reindexAll} icon={<RotateCcw className="h-3.5 w-3.5" />}>
+              Re-index all
+            </Button>
+          </div>
+        )}
         <UploadZone
           courseId={course.id}
           onUploaded={async () => {
@@ -271,20 +299,30 @@ function ChunkInspector({ doc, onClose }: { doc: CourseDocument; onClose: () => 
 
 function RetrievalPlayground({ courseId, disabled }: { courseId: string; disabled: boolean }) {
   const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<SearchMode>("hybrid");
   const [result, setResult] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function search(event: FormEvent) {
-    event.preventDefault();
+  async function run(nextMode: SearchMode) {
     if (!query.trim()) return;
     setLoading(true);
     try {
-      setResult(await api.search(courseId, query));
+      setResult(await api.search(courseId, query, nextMode));
     } catch (error) {
       toast.error(errorMessage(error));
     } finally {
       setLoading(false);
     }
+  }
+
+  function search(event: FormEvent) {
+    event.preventDefault();
+    run(mode);
+  }
+
+  function changeMode(next: SearchMode) {
+    setMode(next);
+    if (result) run(next); // compare retrievers on the same query
   }
 
   return (
@@ -294,8 +332,19 @@ function RetrievalPlayground({ courseId, disabled }: { courseId: string; disable
           <FileSearch className="h-4 w-4 text-indigo-600" /> Retrieval inspector
         </h2>
         <p className="mt-0.5 text-xs text-slate-500">
-          Hybrid search: dense vectors + keyword ranking, fused with Reciprocal Rank Fusion.
+          Dense vectors + BM25 keyword ranking, fused with Reciprocal Rank Fusion. Switch retrievers to compare.
         </p>
+        <div className="mt-3">
+          <Segmented
+            value={mode}
+            onChange={changeMode}
+            options={[
+              { value: "hybrid", label: "Hybrid" },
+              { value: "vector", label: "Vector" },
+              { value: "keyword", label: "Keyword" },
+            ]}
+          />
+        </div>
       </div>
       <form onSubmit={search} className="flex gap-2 px-5 pt-4">
         <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. what is momentum?" disabled={disabled} />

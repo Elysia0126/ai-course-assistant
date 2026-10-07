@@ -46,6 +46,9 @@ export interface CourseDocument {
   chunk_count: number;
   created_at: string;
   processed_at: string | null;
+  embedding_signature: string | null;
+  /** Indexed with a different embedding model than the one now configured. */
+  needs_reindex: boolean;
 }
 
 export interface UploadResult {
@@ -61,6 +64,14 @@ export interface Chunk {
   section: string | null;
   char_count: number;
 }
+
+export interface ChunkDetail extends Chunk {
+  document_id: string;
+  filename: string;
+  file_type: string;
+}
+
+export type SearchMode = "hybrid" | "vector" | "keyword";
 
 export interface SourceRef {
   index: number | null;
@@ -196,6 +207,6 @@ export interface Health {
   database: { status: string; dialect: string };
   vector_store: string;
   llm: { provider: string; model: string };
-  embeddings: { provider: string; model: string; dim: number };
+  embeddings: { provider: string; model: string; dim: number; signature: string };
   limits: { max_upload_mb: number };
 }
