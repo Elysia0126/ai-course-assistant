@@ -80,6 +80,21 @@ def test_grouped_shapes_in_slides_are_parsed(tmp_path: Path) -> None:
     assert "Text hidden inside a grouped shape" in parsed.sections[0].text
 
 
+def test_demo_course_is_idempotent(client: TestClient, settings, monkeypatch) -> None:
+    created = client.post("/api/demo")
+    assert created.status_code == 201
+    course = created.json()
+    docs = client.get(f"/api/courses/{course['id']}/documents").json()
+    assert len(docs) == 3 and {d["status"] for d in docs} == {"ready"}
+    again = client.post("/api/demo")
+    assert again.status_code == 200 and again.json()["id"] == course["id"]
+    assert len(client.get("/api/courses").json()) == 1
+
+    monkeypatch.setattr(settings, "demo_dir", Path("does-not-exist"))
+    client.delete(f"/api/courses/{course['id']}")
+    assert client.post("/api/demo").status_code == 404
+
+
 def test_chunk_detail_returns_full_passage(client: TestClient, ready_course: dict) -> None:
     hit = client.post(f"/api/courses/{ready_course['id']}/search", json={"query": "warmup"}).json()["results"][0]
     chunk = client.get(f"/api/chunks/{hit['chunk_id']}").json()

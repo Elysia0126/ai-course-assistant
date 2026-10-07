@@ -1,7 +1,8 @@
 # Full stack: PostgreSQL + pgvector, FastAPI backend, Next.js frontend.
-#   cp .env.example .env      # optional: add ANTHROPIC_API_KEY etc.
+#   cp .env.example .env      # optional: add ANTHROPIC_API_KEY, APP_API_TOKEN, ...
 #   docker compose up --build
-# Frontend http://localhost:3000 · API docs http://localhost:8000/docs
+# App: http://localhost:3000 (the browser only talks to the frontend, which proxies /api to the backend)
+# API docs: http://127.0.0.1:8000/docs (bound to loopback only)
 name: ai-course-assistant
 
 services:
@@ -13,8 +14,6 @@ services:
       POSTGRES_DB: course_assistant
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d course_assistant"]
       interval: 5s
@@ -29,21 +28,22 @@ services:
     environment:
       # Overrides whatever .env says so the container always talks to the compose database.
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/course_assistant
-      CORS_ORIGINS: http://localhost:3000
       UPLOAD_DIR: /app/data/uploads
+      DEMO_DIR: /app/sample_data
     volumes:
       - uploads:/app/data/uploads
+      - ./sample_data:/app/sample_data:ro
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       db:
         condition: service_healthy
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+      APP_API_TOKEN: ${APP_API_TOKEN:-}
     ports:
       - "3000:3000"
     depends_on:
