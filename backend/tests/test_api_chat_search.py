@@ -96,11 +96,14 @@ def test_chat_validates_input_and_session(client: TestClient, ready_course: dict
     assert client.post("/api/courses/missing/chat", json={"question": "Hi"}).status_code == 404
 
 
-def test_off_topic_question_is_flagged_low_confidence(client: TestClient, ready_course: dict) -> None:
+def test_off_topic_question_is_flagged_and_refused(client: TestClient, ready_course: dict) -> None:
     body = client.post(
         f"/api/courses/{ready_course['id']}/chat", json={"question": "Who won the 1998 football world cup?"}
     ).json()
     assert body["low_confidence"] is True
+    # The offline generator refuses instead of pasting unrelated passages.
+    assert "couldn't find this in your course materials" in body["message"]["content"]
+    assert not any(s["cited"] for s in body["message"]["sources"])
 
 
 def test_delete_chat_session(client: TestClient, ready_course: dict) -> None:

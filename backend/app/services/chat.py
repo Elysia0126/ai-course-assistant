@@ -15,9 +15,9 @@ from app.core.errors import AppError, NoMaterialsError, NotFoundError
 from app.db.session import session_scope
 from app.db.types import utcnow
 from app.models import ChatMessage, ChatSession, Chunk, Course, Document, DocumentStatus
-from app.services.embeddings import EmbeddingProvider
+from app.services.embeddings import EmbeddingProvider, embedding_signature
 from app.services.llm import ChatTurn, LLMBackend
-from app.services.retrieval import HybridRetriever
+from app.services.retrieval import HybridRetriever, check_index_current
 from app.services.text_utils import truncate
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,13 @@ class ChatEvent:
     data: dict[str, Any] = field(default_factory=dict)
 
 
-def ensure_course_ready(session: Session, course_id: str, document_ids: list[str] | None = None) -> Course:
+def ensure_course_ready(
+    session: Session,
+    course_id: str,
+    document_ids: list[str] | None = None,
+    signature: str | None = None,
+) -> Course:
+    """Validate everything a question needs *before* a stream starts, so failures get real HTTP codes."""
     course = session.get(Course, course_id)
     if course is None:
         raise NotFoundError("Course not found.")
@@ -61,6 +67,8 @@ def ensure_course_ready(session: Session, course_id: str, document_ids: list[str
             if not document_ids
             else "None of the selected documents are ready yet."
         )
+    if signature is not None:
+        check_index_current(session, course_id, document_ids, signature)
     return course
 
 
@@ -88,7 +96,7 @@ def run_chat(
     """Stream the whole answer lifecycle as events: meta → sources → token* → done (or error)."""
     started = time.perf_counter()
     with session_scope(session_factory) as db:
-        course = ensure_course_ready(db, course_id, document_ids)
+        course = ensure_course_ready(db, course_id, document_ids, embedding_signature(embedder))
         chat = resolve_session(db, course_id, session_id)
 
         history: list[ChatTurn] = []
@@ -123,7 +131,11 @@ def run_chat(
         parts: list[str] = []
         try:
             for delta in llm.stream_answer(
-                course_name=course.name, question=question, sources=retrieval.chunks, history=history
+                course_name=course.name,
+                question=question,
+                sources=retrieval.chunks,
+                history=history,
+                low_confidence=retrieval.low_confidence,
             ):
                 parts.append(delta)
                 yield ChatEvent("token", {"text": delta})

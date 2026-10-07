@@ -55,7 +55,13 @@ class LLMBackend(Protocol):
     model: str
 
     def stream_answer(
-        self, *, course_name: str, question: str, sources: list[RetrievedChunk], history: list[ChatTurn]
+        self,
+        *,
+        course_name: str,
+        question: str,
+        sources: list[RetrievedChunk],
+        history: list[ChatTurn],
+        low_confidence: bool = False,
     ) -> Iterator[str]: ...
 
     def generate_quiz(
@@ -92,10 +98,16 @@ class PromptedBackend(ABC):
     def _structured(self, system: str, user: str, schema: type[SchemaT], max_tokens: int) -> SchemaT: ...
 
     def stream_answer(
-        self, *, course_name: str, question: str, sources: list[RetrievedChunk], history: list[ChatTurn]
+        self,
+        *,
+        course_name: str,
+        question: str,
+        sources: list[RetrievedChunk],
+        history: list[ChatTurn],
+        low_confidence: bool = False,
     ) -> Iterator[str]:
         messages = [{"role": turn.role, "content": turn.content} for turn in history]
-        messages.append({"role": "user", "content": prompts.answer_user_message(question, sources)})
+        messages.append({"role": "user", "content": prompts.answer_user_message(question, sources, low_confidence)})
         yield from self._stream_text(prompts.answer_system_prompt(course_name), messages, self.answer_max_tokens)
 
     def generate_quiz(

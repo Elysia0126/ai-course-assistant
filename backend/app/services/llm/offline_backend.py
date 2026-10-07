@@ -45,6 +45,10 @@ _STRUCTURAL_TERMS = frozenset(
 _HEDGE_WORDS = frozenset("not also often usually typically very more less still too only just already".split())
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z\-]{3,}")
 
+NOT_COVERED = (
+    "I couldn't find this in your course materials. Try rephrasing the question, select different materials, "
+    "or upload the lecture that covers it."
+)
 OFFLINE_NOTE = (
     "\n\n> _Offline mode: this answer was extracted directly from your materials. Set `ANTHROPIC_API_KEY` "
     "(or an OpenAI-compatible provider) for generated explanations._"
@@ -163,20 +167,21 @@ class OfflineBackend:
     # --- Q&A ---------------------------------------------------------------------
 
     def stream_answer(
-        self, *, course_name: str, question: str, sources: list[RetrievedChunk], history: list[ChatTurn]
+        self,
+        *,
+        course_name: str,
+        question: str,
+        sources: list[RetrievedChunk],
+        history: list[ChatTurn],
+        low_confidence: bool = False,
     ) -> Iterator[str]:
-        if not sources:
-            text = (
-                "I couldn't find anything about this in the uploaded course materials. Try rephrasing the "
-                "question or upload the lecture that covers it."
-            )
-        else:
-            text = self._extractive_answer(question, sources) + OFFLINE_NOTE
+        answer = self._extractive_answer(question, sources) if sources else None
+        text = answer + OFFLINE_NOTE if answer else NOT_COVERED
         # Emit word-sized pieces so the UI exercises the same streaming path as real providers.
         for match in re.finditer(r"\S+\s*", text):
             yield match.group(0)
 
-    def _extractive_answer(self, question: str, sources: list[RetrievedChunk]) -> str:
+    def _extractive_answer(self, question: str, sources: list[RetrievedChunk]) -> str | None:
         q_terms = set(tokenize(question))
         # Keep self-contained statements: no headings/fragments, and nothing that opens with a pronoun
         # ("It prevents …") whose referent was in a sentence the reader won't see.
@@ -217,7 +222,8 @@ class OfflineBackend:
             if len(picked) == 4:
                 break
         if not picked:
-            picked = [(i, truncate(src.content, 240)) for i, src in enumerate(sources[:2], start=1)]
+            # No sentence shares a content word with the question: refuse rather than paste unrelated text.
+            return None
 
         lines = [f"- {truncate(text, 320)} [{source_id}]" for source_id, text in picked]
         return "Here is what your course materials say about this:\n\n" + "\n".join(lines)
