@@ -34,7 +34,9 @@ describe("password rules (mirroring the server)", () => {
   });
 
   it("asks for length and a matching confirmation, nothing else", () => {
-    expect(checkNewPassword("short", "short").password).toMatch(/at least 15/);
+    expect(checkNewPassword("seven!!", "seven!!").password).toMatch(/at least 8 characters \(7 so far\)/);
+    expect(checkNewPassword("8 chars!", "8 chars!")).toEqual({});
+    expect(checkNewPassword("我的课程助手密码", "我的课程助手密码")).toEqual({}); // 8 characters
     expect(checkNewPassword("correct horse battery staple", "correct horse battery stapl")).toEqual({
       password_confirm: "The passwords don't match.",
     });

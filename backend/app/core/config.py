@@ -73,7 +73,8 @@ class Settings(BaseSettings):
     # --- Accounts & sessions ---------------------------------------------------
     registration_enabled: bool = True
     # NIST SP 800-63B-style policy: length over composition rules, no truncation, any Unicode allowed.
-    password_min_length: int = 15
+    # 8 is NIST's floor; it recommends 15 when the password is the only sign-in factor (as it is here).
+    password_min_length: int = 8
     password_max_length: int = 128
     session_cookie_name: str = "aica_session"
     csrf_cookie_name: str = "aica_csrf"

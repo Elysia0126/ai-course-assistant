@@ -167,7 +167,7 @@ user is trusted from the browser except the session cookie, which the API looks 
 
 | Concern | Implementation |
 |---|---|
-| Passwords | **Argon2id** via `pwdlib`; NFKC-normalised, never trimmed or truncated; 15–128 characters, any Unicode, no composition rules (NIST 800-63B style); confirmation checked server-side |
+| Passwords | **Argon2id** via `pwdlib`; NFKC-normalised, never trimmed or truncated; 8–128 characters (`PASSWORD_MIN_LENGTH`; NIST 800-63B recommends 15 when the password is the only factor), any Unicode, no composition rules; confirmation checked server-side |
 | Sessions | 256-bit random token in an **HttpOnly, SameSite=Lax, Path=/, host-only** cookie (`Secure` + `__Host-` prefix behind HTTPS). The database keeps only its **SHA-256** (`auth_sessions.token_hash`). Every sign-in creates a new session (no fixation) and revokes the browser's previous one |
 | Lifetime | 12 h, or 30 days with *Remember me*; 7-day idle timeout; `revoked_at`; cookie `Max-Age` equals the database expiry. Disabled users and revoked/expired/idle sessions get `401` and the stale cookie is cleared. Sessions survive API restarts |
 | CSRF | Every `POST/PUT/PATCH/DELETE` needs (1) an `Origin` (or `Referer`) equal to a trusted origin — scheme, host and port; missing ⇒ refused — and (2) `X-CSRF-Token`: for a session, an HMAC derived from the session secret; before sign-in, a double-submit value bound to an HttpOnly cookie. The proxy's same-host check is only an early filter |
@@ -349,7 +349,7 @@ All backend settings are environment variables (or `.env` / `backend/.env`); see
 | `SESSION_COOKIE_SECURE` / `SESSION_COOKIE_SAMESITE` | `false` / `lax` | `true` behind HTTPS (enforced in production); `strict` is possible |
 | `SESSION_TTL_SECONDS` / `SESSION_REMEMBER_TTL_SECONDS` / `SESSION_IDLE_TIMEOUT_SECONDS` | `43200` / `2592000` / `604800` | 12 h, 30 days with *Remember me*, 7 days idle |
 | `REGISTRATION_ENABLED` | `true` | `false` closes sign-up (admins create accounts with the CLI) |
-| `PASSWORD_MIN_LENGTH` / `PASSWORD_MAX_LENGTH` / `PASSWORD_RESET_TTL_SECONDS` | `15` / `128` / `1800` | Password policy · reset-link lifetime |
+| `PASSWORD_MIN_LENGTH` / `PASSWORD_MAX_LENGTH` / `PASSWORD_RESET_TTL_SECONDS` | `8` / `128` / `1800` | Password policy (counted in characters, not bytes) · reset-link lifetime. Keep the frontend's `PASSWORD_MIN_LENGTH` in `src/lib/auth.ts` in step for instant feedback; the server is authoritative |
 | `MAIL_BACKEND` | `outbox` | `smtp` (production) · `outbox` (`.eml` files in `MAIL_OUTBOX_DIR`, dev only) · `disabled` (reset answers `503`) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `SMTP_FROM` | — / `587` / — / — / — | Required for `MAIL_BACKEND=smtp` (host and from) |
 | `SMTP_STARTTLS` / `SMTP_SSL` | `true` / `false` | STARTTLS (587) or implicit TLS (465) |

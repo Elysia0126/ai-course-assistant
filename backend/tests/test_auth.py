@@ -66,7 +66,7 @@ def test_register_signs_in_and_never_exposes_secrets(anon_client: TestClient, ap
     ("payload", "field"),
     [
         ({"email": "not-an-email"}, "email"),
-        ({"password": "fourteen chars", "password_confirm": "fourteen chars"}, "password"),
+        ({"password": "seven!!", "password_confirm": "seven!!"}, "password"),  # one short of the minimum
         ({"password_confirm": PASSWORD + "!"}, "password_confirm"),
         ({"password": "a" * 20, "password_confirm": "a" * 20}, "password"),
         ({"password": "x" * 129, "password_confirm": "x" * 129}, "password"),
@@ -86,13 +86,14 @@ def test_register_validation(anon_client: TestClient, payload: dict, field: str)
 
 
 def test_password_policy_allows_long_unicode_passphrases_without_trimming(anon_client: TestClient) -> None:
-    passphrase = "  我的课程助手 très sûr 🔒  "  # 15+ characters, spaces at both ends
+    passphrase = "  我的课程助手 très sûr 🔒  "  # CJK, accents, emoji, spaces at both ends
     register(anon_client, "unicode@example.com", passphrase)
     anon_client.post("/api/auth/logout")
     assert login(anon_client, "unicode@example.com", passphrase.strip()).status_code == 401
     assert login(anon_client, "unicode@example.com", passphrase).status_code == 200
-    # Exactly the minimum length is fine.
-    register(anon_client, "minimum@example.com", "fifteen chars!!")
+    # Exactly the minimum length (8) is fine, counted in characters: 8 CJK characters are 8, not 24 bytes.
+    register(anon_client, "minimum@example.com", "8 chars!")
+    register(anon_client, "cjk@example.com", "我的课程助手密码")
 
 
 def test_email_is_case_insensitive_and_unique(anon_client: TestClient, make_client) -> None:

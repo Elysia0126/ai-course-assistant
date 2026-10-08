@@ -113,7 +113,7 @@ def test_role_changes_apply_immediately_and_the_last_admin_is_protected(
 
     # A password that fails the policy creates nothing.
     argv = ("create-user", "--email", "second-admin@example.com", "--admin", "--password-stdin")
-    assert run_cli(settings, *argv, stdin="too short\n", monkeypatch=monkeypatch) == 1
+    assert run_cli(settings, *argv, stdin="short\n", monkeypatch=monkeypatch) == 1
     with admin_client.app.state.session_factory() as db:
         assert db.scalar(select(User).where(User.email == "second-admin@example.com")) is None
         db.add(User(email="second-admin@example.com", password_hash="x", role="admin", is_active=True))

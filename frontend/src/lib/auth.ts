@@ -29,7 +29,7 @@ export function safeNextPath(value: string | null | undefined, fallback = "/"): 
 }
 
 /** Mirrors the server policy for instant feedback; FastAPI re-checks everything (and is the authority). */
-export const PASSWORD_MIN_LENGTH = 15;
+export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 128;
 
 /** Length in characters as the server counts them (Unicode code points after NFKC), not UTF-16 units. */
