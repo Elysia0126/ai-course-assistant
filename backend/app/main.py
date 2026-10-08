@@ -8,19 +8,22 @@ import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, FastAPI, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app import __version__
-from app.api.routes import chat, courses, demo, documents, flashcards, health, quizzes
+from app.api.deps import csrf_protect
+from app.api.routes import admin, auth, chat, courses, demo, documents, flashcards, health, quizzes
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.security import CSRF_HEADER
 from app.db.session import build_engine, build_session_factory, run_migrations
 from app.services.embeddings import build_embedding_provider
 from app.services.ingestion import fail_interrupted_documents
 from app.services.llm import build_llm_backend
+from app.services.mailer import build_mailer
 
 logger = logging.getLogger("app")
 
@@ -33,6 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     session_factory = build_session_factory(engine)
     embedder = build_embedding_provider(settings)
     llm = build_llm_backend(settings)
+    mailer = build_mailer(settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -46,12 +50,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # Load the ONNX model in the background so the first upload/question isn't slow.
             threading.Thread(target=embedder.embed_query, args=("warm-up",), daemon=True).start()
         logger.info(
-            "Ready: db=%s llm=%s/%s embeddings=%s/%s",
+            "Ready: db=%s llm=%s/%s embeddings=%s/%s mail=%s",
             engine.dialect.name,
             llm.name,
             llm.model,
             embedder.name,
             embedder.model,
+            mailer.name,
         )
         yield
         engine.dispose()
@@ -67,16 +72,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_factory = session_factory
     app.state.embedder = embedder
     app.state.llm = llm
+    app.state.mailer = mailer
 
     api_token = settings.app_api_token.get_secret_value() if settings.app_api_token else ""
 
+    # Only needed for browser apps on other origins; the bundled frontend is same-origin via its proxy.
+    # Exact origins only (a wildcard is rejected in Settings) because cookies are involved.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["X-Request-ID"],
+        allow_credentials=bool(settings.cors_origins),
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
+        allow_headers=["Content-Type", "Accept", CSRF_HEADER, "X-Request-ID"],
+        expose_headers=["X-Request-ID", "Retry-After"],
     )
 
     @app.middleware("http")
@@ -90,15 +98,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return JSONResponse(
                     status_code=401,
                     content={
-                        "error": {"code": "unauthorized", "message": "A valid API token is required.", "details": None}
+                        "error": {
+                            "code": "service_token_invalid",
+                            "message": "This API only accepts requests from the web app's server.",
+                            "details": None,
+                        }
                     },
                 )
+            # The caller proved it is our Next.js proxy, so its X-Forwarded-For can be believed.
+            request.state.via_trusted_proxy = True
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         # Basic hardening: no MIME sniffing of uploads, no framing, no referrer leakage.
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
+        if path.startswith("/api/"):
+            # Account and course data is per user: nothing may be stored by browsers or shared caches.
+            response.headers.setdefault("Cache-Control", "no-store")
         if request.url.path != "/api/health":
             logger.info(
                 "%s %s -> %s (%.0f ms) [%s]",
@@ -112,8 +129,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     register_exception_handlers(app)
 
-    api = APIRouter(prefix="/api")
-    for module in (health, courses, demo, documents, chat, quizzes, flashcards):
+    # Every route: CSRF/origin check on state-changing methods. Every route except health and the anonymous
+    # auth endpoints additionally declares CurrentUser (or AdminUser) and loads data through ownership checks.
+    api = APIRouter(prefix="/api", dependencies=[Depends(csrf_protect)])
+    for module in (health, auth, admin, courses, demo, documents, chat, quizzes, flashcards):
         api.include_router(module.router)
     app.include_router(api)
 

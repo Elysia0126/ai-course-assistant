@@ -3,7 +3,7 @@ import hashlib
 from fastapi import APIRouter, BackgroundTasks, Response, status
 from sqlalchemy import select
 
-from app.api.deps import DbSession, EmbedderDep, SessionFactoryDep, SettingsDep
+from app.api.deps import CurrentUser, DbSession, EmbedderDep, SessionFactoryDep, SettingsDep
 from app.api.routes.courses import course_stats, to_out
 from app.core.errors import NotFoundError
 from app.models import Course
@@ -21,7 +21,7 @@ DEMO_CODE = "ML 101 · demo"
 @router.post(
     "/demo",
     response_model=CourseOut,
-    summary="Create the demo course from the bundled sample materials (idempotent)",
+    summary="Create your demo course from the bundled sample materials (idempotent per user)",
     responses={201: {"description": "Demo course created"}, 200: {"description": "Demo course already exists"}},
 )
 def create_demo_course(
@@ -31,8 +31,12 @@ def create_demo_course(
     settings: SettingsDep,
     session_factory: SessionFactoryDep,
     embedder: EmbedderDep,
+    user: CurrentUser,
 ) -> CourseOut:
-    existing = db.scalar(select(Course).where(Course.name == DEMO_NAME, Course.code == DEMO_CODE))
+    # Each user gets their own copy; the lookup is scoped to the caller so it never returns someone else's.
+    existing = db.scalar(
+        select(Course).where(Course.owner_id == user.id, Course.name == DEMO_NAME, Course.code == DEMO_CODE)
+    )
     if existing is not None:
         return to_out(existing, course_stats(db, [existing.id])[existing.id])
 
@@ -45,6 +49,7 @@ def create_demo_course(
         raise NotFoundError("Demo materials are not available in this deployment.")
 
     course = Course(
+        owner_id=user.id,
         name=DEMO_NAME,
         code=DEMO_CODE,
         term="Sample",
@@ -66,6 +71,6 @@ def create_demo_course(
         documents.append(store_document(db, settings, course.id, upload))
     db.commit()
     for document in documents:
-        background_tasks.add_task(ingest_document, session_factory, settings, embedder, document.id)
+        background_tasks.add_task(ingest_document, session_factory, settings, embedder, document.id, owner_id=user.id)
     response.status_code = status.HTTP_201_CREATED
     return to_out(course, course_stats(db, [course.id])[course.id])

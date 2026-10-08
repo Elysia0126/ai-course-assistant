@@ -6,6 +6,10 @@ python-multipart>=0.0.9
 pydantic>=2.7
 pydantic-settings>=2.3
 
+# Accounts: Argon2id password hashing, email address validation
+pwdlib[argon2]>=0.3
+email-validator>=2.2
+
 # Database
 sqlalchemy>=2.0.30
 alembic>=1.13

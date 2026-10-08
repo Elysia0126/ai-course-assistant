@@ -2,10 +2,11 @@ from fastapi import APIRouter, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import DbSession, EmbedderDep, LLMDep, SettingsDep, get_course_or_404
-from app.core.errors import AppError, NotFoundError
+from app.api.deps import CurrentUser, DbSession, EmbedderDep, LLMDep, SettingsDep, get_course_or_404, get_quiz_or_404
+from app.core.errors import AppError
 from app.models import Quiz
 from app.schemas.quiz import AttemptOut, AttemptRequest, QuizDetail, QuizGenerateRequest, QuizSummary
+from app.services.access import ensure_documents_in_course
 from app.services.quizzes import create_quiz, grade_attempt
 
 router = APIRouter(tags=["quizzes"])
@@ -24,13 +25,6 @@ def _detail(quiz: Quiz) -> QuizDetail:
     return QuizDetail.model_validate(quiz).model_copy(update=_summary_fields(quiz))
 
 
-def _get_quiz(db: DbSession, quiz_id: str) -> Quiz:
-    quiz = db.get(Quiz, quiz_id)
-    if quiz is None:
-        raise NotFoundError("Quiz not found.")
-    return quiz
-
-
 @router.post(
     "/courses/{course_id}/quizzes",
     response_model=QuizDetail,
@@ -44,8 +38,10 @@ def generate_quiz(
     settings: SettingsDep,
     embedder: EmbedderDep,
     llm: LLMDep,
+    user: CurrentUser,
 ) -> QuizDetail:
-    course = get_course_or_404(db, course_id)
+    course = get_course_or_404(db, course_id, user)
+    ensure_documents_in_course(db, course.id, payload.document_ids)
     quiz = create_quiz(
         db,
         settings,
@@ -62,8 +58,8 @@ def generate_quiz(
 
 
 @router.get("/courses/{course_id}/quizzes", response_model=list[QuizSummary], summary="List quizzes")
-def list_quizzes(course_id: str, db: DbSession) -> list[QuizSummary]:
-    get_course_or_404(db, course_id)
+def list_quizzes(course_id: str, db: DbSession, user: CurrentUser) -> list[QuizSummary]:
+    get_course_or_404(db, course_id, user)
     quizzes = db.scalars(
         select(Quiz)
         .where(Quiz.course_id == course_id)
@@ -74,13 +70,13 @@ def list_quizzes(course_id: str, db: DbSession) -> list[QuizSummary]:
 
 
 @router.get("/quizzes/{quiz_id}", response_model=QuizDetail, summary="Get a quiz (answers hidden)")
-def get_quiz(quiz_id: str, db: DbSession) -> QuizDetail:
-    return _detail(_get_quiz(db, quiz_id))
+def get_quiz(quiz_id: str, db: DbSession, user: CurrentUser) -> QuizDetail:
+    return _detail(get_quiz_or_404(db, quiz_id, user))
 
 
 @router.delete("/quizzes/{quiz_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a quiz")
-def delete_quiz(quiz_id: str, db: DbSession) -> Response:
-    db.delete(_get_quiz(db, quiz_id))
+def delete_quiz(quiz_id: str, db: DbSession, user: CurrentUser) -> Response:
+    db.delete(get_quiz_or_404(db, quiz_id, user))
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -91,8 +87,9 @@ def delete_quiz(quiz_id: str, db: DbSession) -> Response:
     status_code=status.HTTP_201_CREATED,
     summary="Submit answers and get graded results",
 )
-def submit_attempt(quiz_id: str, payload: AttemptRequest, db: DbSession) -> AttemptOut:
-    quiz = _get_quiz(db, quiz_id)
+def submit_attempt(quiz_id: str, payload: AttemptRequest, db: DbSession, user: CurrentUser) -> AttemptOut:
+    quiz = get_quiz_or_404(db, quiz_id, user)
+    # Question ids from another quiz (or another user's) are rejected, not silently graded.
     unknown = set(payload.answers) - {q.id for q in quiz.questions}
     if unknown:
         raise AppError("Answers reference questions that are not part of this quiz.", code="invalid_answers")
@@ -100,6 +97,6 @@ def submit_attempt(quiz_id: str, payload: AttemptRequest, db: DbSession) -> Atte
 
 
 @router.get("/quizzes/{quiz_id}/attempts", response_model=list[AttemptOut], summary="Attempt history")
-def list_attempts(quiz_id: str, db: DbSession) -> list[AttemptOut]:
-    quiz = _get_quiz(db, quiz_id)
+def list_attempts(quiz_id: str, db: DbSession, user: CurrentUser) -> list[AttemptOut]:
+    quiz = get_quiz_or_404(db, quiz_id, user)
     return [AttemptOut.model_validate(a) for a in reversed(quiz.attempts)]

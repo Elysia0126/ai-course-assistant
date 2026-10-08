@@ -9,6 +9,9 @@ ruff>=0.6
 # Used by tests and scripts/make_sample_data.py to generate PDF fixtures
 reportlab>=4.2
 
+# Local SMTP server: tests the real SMTP mailer and catches password-reset mail in the E2E run
+aiosmtpd>=1.4
+
 # Embedded PostgreSQL + pgvector for local development without Docker
 # (see scripts/dev_db.py). Wheels are only published for Python <= 3.12.
 pgserver>=0.1.4; python_version < "3.13"

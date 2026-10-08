@@ -5,8 +5,17 @@ from fastapi import APIRouter, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 
-from app.api.deps import DbSession, EmbedderDep, LLMDep, SessionFactoryDep, SettingsDep, get_course_or_404
-from app.core.errors import LLMError, NotFoundError
+from app.api.deps import (
+    CurrentUser,
+    DbSession,
+    EmbedderDep,
+    LLMDep,
+    SessionFactoryDep,
+    SettingsDep,
+    get_chat_or_404,
+    get_course_or_404,
+)
+from app.core.errors import LLMError
 from app.models import ChatMessage, ChatSession
 from app.schemas.chat import (
     ChatMessageOut,
@@ -43,10 +52,13 @@ def chat_stream(
     session_factory: SessionFactoryDep,
     embedder: EmbedderDep,
     llm: LLMDep,
+    user: CurrentUser,
 ) -> StreamingResponse:
-    # Validate up front so client errors get real HTTP status codes rather than a stream error event.
-    ensure_course_ready(db, course_id, payload.document_ids, embedding_signature(embedder))
+    # Authenticate, authorise and validate up front so failures get real HTTP status codes before the first
+    # event (the session/CSRF checks already ran as dependencies).
+    ensure_course_ready(db, course_id, payload.document_ids, embedding_signature(embedder), owner_id=user.id)
     resolve_session(db, course_id, payload.session_id)
+    owner_id = user.id
     db.close()
 
     def events() -> Iterator[str]:
@@ -55,6 +67,7 @@ def chat_stream(
             settings,
             embedder,
             llm,
+            owner_id=owner_id,
             course_id=course_id,
             question=payload.question,
             session_id=payload.session_id,
@@ -66,8 +79,9 @@ def chat_stream(
     return StreamingResponse(
         events(),
         media_type="text/event-stream",
-        # no-transform stops proxies/compression middleware (incl. Next.js) from buffering the stream.
-        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+        # no-transform stops proxies/compression middleware (incl. Next.js) from buffering the stream;
+        # no-store keeps a private answer out of every cache.
+        headers={"Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no"},
     )
 
 
@@ -79,6 +93,7 @@ def chat(
     session_factory: SessionFactoryDep,
     embedder: EmbedderDep,
     llm: LLMDep,
+    user: CurrentUser,
 ) -> ChatResponse:
     sources: list[dict] = []
     low_confidence = False
@@ -87,6 +102,7 @@ def chat(
         settings,
         embedder,
         llm,
+        owner_id=user.id,
         course_id=course_id,
         question=payload.question,
         session_id=payload.session_id,
@@ -113,8 +129,8 @@ def chat(
 
 
 @router.get("/courses/{course_id}/chat/sessions", response_model=list[ChatSessionOut], summary="List chat sessions")
-def list_sessions(course_id: str, db: DbSession) -> list[ChatSessionOut]:
-    get_course_or_404(db, course_id)
+def list_sessions(course_id: str, db: DbSession, user: CurrentUser) -> list[ChatSessionOut]:
+    get_course_or_404(db, course_id, user)
     rows = db.execute(
         select(ChatSession, func.count(ChatMessage.id))
         .outerjoin(ChatMessage, ChatMessage.session_id == ChatSession.id)
@@ -131,20 +147,16 @@ def list_sessions(course_id: str, db: DbSession) -> list[ChatSessionOut]:
 
 
 @router.get("/chat/sessions/{session_id}", response_model=ChatSessionDetail, summary="Get a chat transcript")
-def get_session(session_id: str, db: DbSession) -> ChatSessionDetail:
-    chat = db.get(ChatSession, session_id)
-    if chat is None:
-        raise NotFoundError("Chat session not found.")
+def get_session(session_id: str, db: DbSession, user: CurrentUser) -> ChatSessionDetail:
+    chat = get_chat_or_404(db, session_id, user)
     detail = ChatSessionDetail.model_validate(chat)
     detail.message_count = len(chat.messages)
     return detail
 
 
 @router.delete("/chat/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a chat")
-def delete_session(session_id: str, db: DbSession) -> Response:
-    chat = db.get(ChatSession, session_id)
-    if chat is None:
-        raise NotFoundError("Chat session not found.")
+def delete_session(session_id: str, db: DbSession, user: CurrentUser) -> Response:
+    chat = get_chat_or_404(db, session_id, user)
     db.delete(chat)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -157,9 +169,14 @@ def delete_session(session_id: str, db: DbSession) -> Response:
     summary="Hybrid search over course materials (retrieval inspector)",
 )
 def search(
-    course_id: str, payload: SearchRequest, db: DbSession, settings: SettingsDep, embedder: EmbedderDep
+    course_id: str,
+    payload: SearchRequest,
+    db: DbSession,
+    settings: SettingsDep,
+    embedder: EmbedderDep,
+    user: CurrentUser,
 ) -> SearchResponse:
-    ensure_course_ready(db, course_id, payload.document_ids, embedding_signature(embedder))
+    ensure_course_ready(db, course_id, payload.document_ids, embedding_signature(embedder), owner_id=user.id)
     result = HybridRetriever(db, settings, embedder).search(
         course_id, payload.query, top_k=payload.top_k, document_ids=payload.document_ids, mode=payload.mode
     )

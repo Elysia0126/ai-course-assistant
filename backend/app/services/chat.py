@@ -15,6 +15,7 @@ from app.core.errors import AppError, NoMaterialsError, NotFoundError
 from app.db.session import session_scope
 from app.db.types import utcnow
 from app.models import ChatMessage, ChatSession, Chunk, Course, Document, DocumentStatus
+from app.services.access import ensure_documents_in_course, owned_course
 from app.services.embeddings import EmbeddingProvider, embedding_signature
 from app.services.llm import ChatTurn, LLMBackend
 from app.services.retrieval import HybridRetriever, check_index_current
@@ -49,11 +50,13 @@ def ensure_course_ready(
     course_id: str,
     document_ids: list[str] | None = None,
     signature: str | None = None,
+    *,
+    owner_id: str,
 ) -> Course:
-    """Validate everything a question needs *before* a stream starts, so failures get real HTTP codes."""
-    course = session.get(Course, course_id)
-    if course is None:
-        raise NotFoundError("Course not found.")
+    """Validate everything a question needs *before* a stream starts, so failures get real HTTP codes:
+    the course belongs to ``owner_id``, the document filter stays inside it, and its index is usable."""
+    course = owned_course(session, course_id, owner_id)
+    ensure_documents_in_course(session, course_id, document_ids)
     query = (
         select(func.count(Chunk.id))
         .join(Document, Document.id == Chunk.document_id)
@@ -87,16 +90,20 @@ def run_chat(
     embedder: EmbeddingProvider,
     llm: LLMBackend,
     *,
+    owner_id: str,
     course_id: str,
     question: str,
     session_id: str | None,
     document_ids: list[str] | None,
     top_k: int | None,
 ) -> Iterator[ChatEvent]:
-    """Stream the whole answer lifecycle as events: meta → sources → token* → done (or error)."""
+    """Stream the whole answer lifecycle as events: meta → sources → token* → done (or error).
+
+    Opens its own database session (the request's is closed before streaming), so it re-checks ownership
+    with the ``owner_id`` the route authenticated instead of trusting the ids alone."""
     started = time.perf_counter()
     with session_scope(session_factory) as db:
-        course = ensure_course_ready(db, course_id, document_ids, embedding_signature(embedder))
+        course = ensure_course_ready(db, course_id, document_ids, embedding_signature(embedder), owner_id=owner_id)
         chat = resolve_session(db, course_id, session_id)
 
         history: list[ChatTurn] = []

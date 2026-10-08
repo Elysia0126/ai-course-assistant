@@ -23,7 +23,8 @@ def utcnow() -> datetime:
 
 
 class UTCDateTime(TypeDecorator[datetime]):
-    """Timezone-aware datetime. SQLite drops tzinfo, so re-attach UTC on the way out."""
+    """Timezone-aware datetime, always returned in UTC. SQLite drops tzinfo (re-attached here) and
+    PostgreSQL returns values in the connection's TimeZone (converted here)."""
 
     impl = DateTime(timezone=True)
     cache_ok = True
@@ -34,9 +35,9 @@ class UTCDateTime(TypeDecorator[datetime]):
         return value
 
     def process_result_value(self, value: datetime | None, dialect: Dialect) -> datetime | None:
-        if value is not None and value.tzinfo is None:
-            value = value.replace(tzinfo=UTC)
-        return value
+        if value is None:
+            return None
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 class EmbeddingVector(TypeDecorator[np.ndarray]):

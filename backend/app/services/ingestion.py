@@ -36,12 +36,19 @@ def ingest_document(
     settings: Settings,
     embedder: EmbeddingProvider,
     document_id: str,
+    *,
+    owner_id: str | None = None,
 ) -> None:
+    """Runs after the response, in a fresh database session. ``owner_id`` carries the authorisation of the
+    request that scheduled it: the document must still belong to that user's course."""
     started = time.perf_counter()
     with session_scope(session_factory) as session:
         document = session.get(Document, document_id)
         if document is None:
             logger.warning("Ingestion skipped: document %s no longer exists", document_id)
+            return
+        if owner_id is not None and document.course.owner_id != owner_id:
+            logger.warning("Ingestion skipped: document %s is not owned by the requesting user", document_id)
             return
         document.status = DocumentStatus.PROCESSING
         document.error_message = None

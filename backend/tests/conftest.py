@@ -2,11 +2,14 @@
 
 Tests run hermetically: SQLite + hash embeddings + the offline generator. Set TEST_DATABASE_URL to a
 PostgreSQL URL (with pgvector) to run the same suite against the production code paths.
+
+Authentication is never mocked: ``client`` registers a real account through the API and keeps its session
+cookie; requests carry Origin + X-CSRF-Token exactly like the web app (see tests/helpers.py).
 """
 
 import os
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 # Must be set before any app module reads settings.
@@ -14,6 +17,8 @@ _TMP = Path(tempfile.mkdtemp(prefix="aca-tests-"))
 os.environ.update(
     {
         "APP_ENV": "test",
+        "APP_PUBLIC_URL": "http://testserver",
+        "MAIL_BACKEND": "memory",
         "LLM_PROVIDER": "offline",
         "EMBEDDING_PROVIDER": "hash",
         "EMBEDDING_DIM": "384",
@@ -22,6 +27,7 @@ os.environ.update(
         "LOG_LEVEL": "WARNING",
         "ANTHROPIC_API_KEY": "",
         "OPENAI_API_KEY": "",
+        "APP_API_TOKEN": "",
     }
 )
 
@@ -33,6 +39,9 @@ from app.core.config import Settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.main import create_app  # noqa: E402
 from tests import factories  # noqa: E402
+from tests.helpers import browserlike, register  # noqa: E402
+
+STUDENT = "student@example.com"
 
 
 @pytest.fixture(scope="session")
@@ -47,13 +56,39 @@ def app(settings: Settings):
 
 
 @pytest.fixture()
-def client(app) -> Iterator[TestClient]:
+def anon_client(app) -> Iterator[TestClient]:
+    """A browser with no account (yet)."""
     with TestClient(app) as test_client:
-        yield test_client
+        yield browserlike(test_client)
     # Clean slate between tests, keeping the migrated schema.
     with app.state.engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             conn.execute(text(f"DELETE FROM {table.name}"))
+    app.state.mailer.messages.clear()
+
+
+@pytest.fixture()
+def client(anon_client: TestClient) -> TestClient:
+    """A browser signed in as a freshly registered student."""
+    register(anon_client, STUDENT, display_name="Student")
+    return anon_client
+
+
+@pytest.fixture()
+def make_client(app, anon_client: TestClient) -> Iterator[Callable[..., TestClient]]:
+    """More independent browsers (separate cookie jars), optionally registered as ``email``."""
+    clients: list[TestClient] = []
+
+    def factory(email: str | None = None) -> TestClient:
+        other = browserlike(TestClient(app))
+        clients.append(other)
+        if email:
+            register(other, email)
+        return other
+
+    yield factory
+    for other in clients:
+        other.close()
 
 
 @pytest.fixture()

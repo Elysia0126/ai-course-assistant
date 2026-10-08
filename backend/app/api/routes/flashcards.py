@@ -2,8 +2,16 @@ from fastapi import APIRouter, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import DbSession, EmbedderDep, LLMDep, SettingsDep, get_course_or_404
-from app.core.errors import NotFoundError
+from app.api.deps import (
+    CurrentUser,
+    DbSession,
+    EmbedderDep,
+    LLMDep,
+    SettingsDep,
+    get_card_or_404,
+    get_course_or_404,
+    get_deck_or_404,
+)
 from app.db.types import utcnow
 from app.models import Flashcard, FlashcardDeck
 from app.schemas.flashcard import (
@@ -14,6 +22,7 @@ from app.schemas.flashcard import (
     ReviewRequest,
     StudySession,
 )
+from app.services.access import ensure_documents_in_course
 from app.services.flashcards import create_deck, due_cards, review_card
 
 router = APIRouter(tags=["flashcards"])
@@ -30,13 +39,6 @@ def _summary(deck: FlashcardDeck) -> DeckSummary:
     )
 
 
-def _get_deck(db: DbSession, deck_id: str) -> FlashcardDeck:
-    deck = db.get(FlashcardDeck, deck_id)
-    if deck is None:
-        raise NotFoundError("Flashcard deck not found.")
-    return deck
-
-
 @router.post(
     "/courses/{course_id}/decks",
     response_model=DeckDetail,
@@ -50,8 +52,10 @@ def generate_deck(
     settings: SettingsDep,
     embedder: EmbedderDep,
     llm: LLMDep,
+    user: CurrentUser,
 ) -> DeckDetail:
-    course = get_course_or_404(db, course_id)
+    course = get_course_or_404(db, course_id, user)
+    ensure_documents_in_course(db, course.id, payload.document_ids)
     deck = create_deck(
         db,
         settings,
@@ -70,8 +74,8 @@ def _detail(deck: FlashcardDeck) -> DeckDetail:
 
 
 @router.get("/courses/{course_id}/decks", response_model=list[DeckSummary], summary="List flashcard decks")
-def list_decks(course_id: str, db: DbSession) -> list[DeckSummary]:
-    get_course_or_404(db, course_id)
+def list_decks(course_id: str, db: DbSession, user: CurrentUser) -> list[DeckSummary]:
+    get_course_or_404(db, course_id, user)
     decks = db.scalars(
         select(FlashcardDeck)
         .where(FlashcardDeck.course_id == course_id)
@@ -82,28 +86,25 @@ def list_decks(course_id: str, db: DbSession) -> list[DeckSummary]:
 
 
 @router.get("/decks/{deck_id}", response_model=DeckDetail, summary="Get a deck with all cards")
-def get_deck(deck_id: str, db: DbSession) -> DeckDetail:
-    return _detail(_get_deck(db, deck_id))
+def get_deck(deck_id: str, db: DbSession, user: CurrentUser) -> DeckDetail:
+    return _detail(get_deck_or_404(db, deck_id, user))
 
 
 @router.get("/decks/{deck_id}/study", response_model=StudySession, summary="Cards due for review now")
-def study(deck_id: str, db: DbSession, limit: int = Query(default=50, ge=1, le=200)) -> StudySession:
-    deck = _get_deck(db, deck_id)
+def study(deck_id: str, db: DbSession, user: CurrentUser, limit: int = Query(default=50, ge=1, le=200)) -> StudySession:
+    deck = get_deck_or_404(db, deck_id, user)
     cards = due_cards(db, deck.id, limit=limit)
     return StudySession(deck=_summary(deck), cards=[FlashcardOut.model_validate(c) for c in cards])
 
 
 @router.post("/flashcards/{card_id}/review", response_model=FlashcardOut, summary="Record a review (SM-2)")
-def review(card_id: str, payload: ReviewRequest, db: DbSession) -> Flashcard:
-    card = db.get(Flashcard, card_id)
-    if card is None:
-        raise NotFoundError("Flashcard not found.")
-    return review_card(db, card, payload.rating)
+def review(card_id: str, payload: ReviewRequest, db: DbSession, user: CurrentUser) -> Flashcard:
+    return review_card(db, get_card_or_404(db, card_id, user), payload.rating)
 
 
 @router.post("/decks/{deck_id}/reset", response_model=DeckSummary, summary="Reset review progress for a deck")
-def reset_deck(deck_id: str, db: DbSession) -> DeckSummary:
-    deck = _get_deck(db, deck_id)
+def reset_deck(deck_id: str, db: DbSession, user: CurrentUser) -> DeckSummary:
+    deck = get_deck_or_404(db, deck_id, user)
     now = utcnow()
     for card in deck.cards:
         card.ease_factor, card.interval_days, card.repetitions, card.lapses = 2.5, 0.0, 0, 0
@@ -113,7 +114,7 @@ def reset_deck(deck_id: str, db: DbSession) -> DeckSummary:
 
 
 @router.delete("/decks/{deck_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a deck")
-def delete_deck(deck_id: str, db: DbSession) -> Response:
-    db.delete(_get_deck(db, deck_id))
+def delete_deck(deck_id: str, db: DbSession, user: CurrentUser) -> Response:
+    db.delete(get_deck_or_404(db, deck_id, user))
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

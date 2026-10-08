@@ -2,7 +2,7 @@ from fastapi import APIRouter, Response, status
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import DbSession, SettingsDep, get_course_or_404
+from app.api.deps import CurrentUser, DbSession, SettingsDep, get_course_or_404
 from app.db.types import utcnow
 from app.models import ChatSession, Chunk, Course, Document, DocumentStatus, Flashcard, FlashcardDeck, Quiz
 from app.schemas.course import CourseCreate, CourseOut, CourseStats, CourseUpdate
@@ -57,30 +57,31 @@ def to_out(course: Course, stats: CourseStats) -> CourseOut:
     return out
 
 
-@router.get("", response_model=list[CourseOut], summary="List courses with dashboard stats")
-def list_courses(db: DbSession) -> list[CourseOut]:
-    courses = db.scalars(select(Course).order_by(Course.updated_at.desc())).all()
+@router.get("", response_model=list[CourseOut], summary="List your courses with dashboard stats")
+def list_courses(db: DbSession, user: CurrentUser) -> list[CourseOut]:
+    courses = db.scalars(select(Course).where(Course.owner_id == user.id).order_by(Course.updated_at.desc())).all()
     stats = course_stats(db, [c.id for c in courses])
     return [to_out(c, stats[c.id]) for c in courses]
 
 
 @router.post("", response_model=CourseOut, status_code=status.HTTP_201_CREATED, summary="Create a course")
-def create_course(payload: CourseCreate, db: DbSession) -> CourseOut:
-    course = Course(**payload.model_dump())
+def create_course(payload: CourseCreate, db: DbSession, user: CurrentUser) -> CourseOut:
+    # The owner always comes from the session; CourseCreate has no owner field (extra keys are ignored).
+    course = Course(**payload.model_dump(), owner_id=user.id)
     db.add(course)
     db.commit()
     return to_out(course, CourseStats())
 
 
 @router.get("/{course_id}", response_model=CourseOut, summary="Get one course")
-def get_course(course_id: str, db: DbSession) -> CourseOut:
-    course = get_course_or_404(db, course_id)
+def get_course(course_id: str, db: DbSession, user: CurrentUser) -> CourseOut:
+    course = get_course_or_404(db, course_id, user)
     return to_out(course, course_stats(db, [course.id])[course.id])
 
 
 @router.patch("/{course_id}", response_model=CourseOut, summary="Update course details")
-def update_course(course_id: str, payload: CourseUpdate, db: DbSession) -> CourseOut:
-    course = get_course_or_404(db, course_id)
+def update_course(course_id: str, payload: CourseUpdate, db: DbSession, user: CurrentUser) -> CourseOut:
+    course = get_course_or_404(db, course_id, user)
     for field, value in payload.model_dump(exclude_unset=True).items():
         if field == "name" and not value:
             continue
@@ -90,8 +91,8 @@ def update_course(course_id: str, payload: CourseUpdate, db: DbSession) -> Cours
 
 
 @router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a course and all its data")
-def delete_course(course_id: str, db: DbSession, settings: SettingsDep) -> Response:
-    course = get_course_or_404(db, course_id)
+def delete_course(course_id: str, db: DbSession, settings: SettingsDep, user: CurrentUser) -> Response:
+    course = get_course_or_404(db, course_id, user)
     db.delete(course)
     db.commit()
     delete_course_files(settings, course_id)

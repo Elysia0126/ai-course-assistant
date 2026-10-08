@@ -5,7 +5,16 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import DbSession, EmbedderDep, SessionFactoryDep, SettingsDep, get_course_or_404
+from app.api.deps import (
+    CurrentUser,
+    DbSession,
+    EmbedderDep,
+    SessionFactoryDep,
+    SettingsDep,
+    get_chunk_or_404,
+    get_course_or_404,
+    get_document_or_404,
+)
 from app.core.errors import AppError, ConflictError, NotFoundError
 from app.models import Chunk, Document, DocumentStatus
 from app.schemas.document import ChunkDetail, ChunkOut, DocumentOut, UploadError, UploadResult
@@ -15,13 +24,8 @@ from app.services.ingestion import ingest_document
 
 router = APIRouter(tags=["documents"])
 MAX_FILES_PER_UPLOAD = 20
-
-
-def _get_document(db: DbSession, document_id: str) -> Document:
-    document = db.get(Document, document_id)
-    if document is None:
-        raise NotFoundError("Document not found.")
-    return document
+# Original uploads are private: never stored by browsers or shared caches.
+PRIVATE_FILE_HEADERS = {"Cache-Control": "private, no-store"}
 
 
 def _out(document: Document, signature: str) -> DocumentOut:
@@ -31,8 +35,8 @@ def _out(document: Document, signature: str) -> DocumentOut:
 
 
 @router.get("/courses/{course_id}/documents", response_model=list[DocumentOut], summary="List course materials")
-def list_documents(course_id: str, db: DbSession, embedder: EmbedderDep) -> list[DocumentOut]:
-    get_course_or_404(db, course_id)
+def list_documents(course_id: str, db: DbSession, embedder: EmbedderDep, user: CurrentUser) -> list[DocumentOut]:
+    get_course_or_404(db, course_id, user)
     signature = embedding_signature(embedder)
     documents = db.scalars(select(Document).where(Document.course_id == course_id).order_by(Document.created_at.desc()))
     return [_out(d, signature) for d in documents]
@@ -51,8 +55,9 @@ def reindex_course(
     settings: SettingsDep,
     session_factory: SessionFactoryDep,
     embedder: EmbedderDep,
+    user: CurrentUser,
 ) -> list[DocumentOut]:
-    get_course_or_404(db, course_id)
+    get_course_or_404(db, course_id, user)
     documents = list(
         db.scalars(
             select(Document).where(Document.course_id == course_id, Document.status != DocumentStatus.PROCESSING)
@@ -63,7 +68,7 @@ def reindex_course(
         document.error_message = None
     db.commit()
     for document in documents:
-        background_tasks.add_task(ingest_document, session_factory, settings, embedder, document.id)
+        background_tasks.add_task(ingest_document, session_factory, settings, embedder, document.id, owner_id=user.id)
     return [_out(d, embedding_signature(embedder)) for d in documents]
 
 
@@ -82,9 +87,10 @@ async def upload_documents(
     settings: SettingsDep,
     session_factory: SessionFactoryDep,
     embedder: EmbedderDep,
+    user: CurrentUser,
     files: list[UploadFile] = File(..., description="One or more course files"),
 ) -> UploadResult:
-    get_course_or_404(db, course_id)
+    get_course_or_404(db, course_id, user)
     if len(files) > MAX_FILES_PER_UPLOAD:
         raise AppError(f"Upload at most {MAX_FILES_PER_UPLOAD} files at a time.", code="too_many_files")
 
@@ -118,7 +124,7 @@ async def upload_documents(
         )
 
     for document in created:
-        background_tasks.add_task(ingest_document, session_factory, settings, embedder, document.id)
+        background_tasks.add_task(ingest_document, session_factory, settings, embedder, document.id, owner_id=user.id)
     return UploadResult(
         documents=[_out(d, embedding_signature(embedder)) for d in created],
         errors=[UploadError(filename=name, code=e.code, message=e.message) for e, name in errors],
@@ -126,15 +132,13 @@ async def upload_documents(
 
 
 @router.get("/documents/{document_id}", response_model=DocumentOut, summary="Get document status")
-def get_document(document_id: str, db: DbSession, embedder: EmbedderDep) -> DocumentOut:
-    return _out(_get_document(db, document_id), embedding_signature(embedder))
+def get_document(document_id: str, db: DbSession, embedder: EmbedderDep, user: CurrentUser) -> DocumentOut:
+    return _out(get_document_or_404(db, document_id, user), embedding_signature(embedder))
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail, summary="Full text of one indexed passage")
-def get_chunk(chunk_id: str, db: DbSession) -> ChunkDetail:
-    chunk = db.get(Chunk, chunk_id)
-    if chunk is None:
-        raise NotFoundError("This passage no longer exists — the document may have been re-indexed or deleted.")
+def get_chunk(chunk_id: str, db: DbSession, user: CurrentUser) -> ChunkDetail:
+    chunk = get_chunk_or_404(db, chunk_id, user)
     detail = ChunkDetail.model_validate(chunk)
     detail.filename = chunk.document.filename
     detail.file_type = chunk.document.file_type
@@ -142,14 +146,18 @@ def get_chunk(chunk_id: str, db: DbSession) -> ChunkDetail:
 
 
 @router.get("/documents/{document_id}/file", summary="Download/view the original file")
-def get_document_file(document_id: str, db: DbSession) -> FileResponse:
-    document = _get_document(db, document_id)
+def get_document_file(document_id: str, db: DbSession, user: CurrentUser) -> FileResponse:
+    document = get_document_or_404(db, document_id, user)
     path = Path(document.storage_path)
     if not path.exists():
         raise NotFoundError("The stored file is missing.")
     # Inline so PDFs open in the browser viewer, where '#page=N' deep links work.
     return FileResponse(
-        path, media_type=document.mime_type, filename=document.filename, content_disposition_type="inline"
+        path,
+        media_type=document.mime_type,
+        filename=document.filename,
+        content_disposition_type="inline",
+        headers=PRIVATE_FILE_HEADERS,
     )
 
 
@@ -157,11 +165,12 @@ def get_document_file(document_id: str, db: DbSession) -> FileResponse:
 def list_chunks(
     document_id: str,
     db: DbSession,
+    user: CurrentUser,
     page: int | None = Query(default=None, ge=1, description="Only chunks from this page/slide"),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> list[Chunk]:
-    _get_document(db, document_id)
+    get_document_or_404(db, document_id, user)
     stmt = select(Chunk).where(Chunk.document_id == document_id)
     if page is not None:
         stmt = stmt.where(Chunk.page_number == page)
@@ -181,20 +190,21 @@ def reprocess_document(
     settings: SettingsDep,
     session_factory: SessionFactoryDep,
     embedder: EmbedderDep,
+    user: CurrentUser,
 ) -> Document:
-    document = _get_document(db, document_id)
+    document = get_document_or_404(db, document_id, user)
     if document.status == DocumentStatus.PROCESSING:
         raise ConflictError("This document is already being processed.")
     document.status = DocumentStatus.PENDING
     document.error_message = None
     db.commit()
-    background_tasks.add_task(ingest_document, session_factory, settings, embedder, document.id)
+    background_tasks.add_task(ingest_document, session_factory, settings, embedder, document.id, owner_id=user.id)
     return document
 
 
 @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a document")
-def delete_document(document_id: str, db: DbSession) -> Response:
-    document = _get_document(db, document_id)
+def delete_document(document_id: str, db: DbSession, user: CurrentUser) -> Response:
+    document = get_document_or_404(db, document_id, user)
     db.delete(document)
     db.commit()
     delete_document_file(document)
