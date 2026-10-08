@@ -1,8 +1,11 @@
 # Full stack: PostgreSQL + pgvector, FastAPI backend, Next.js frontend.
-#   cp .env.example .env      # optional: add ANTHROPIC_API_KEY, APP_API_TOKEN, ...
+#   cp .env.example .env      # set APP_API_TOKEN; optionally ANTHROPIC_API_KEY, SMTP_*, ...
 #   docker compose up --build
+#   docker compose exec backend python -m app.cli create-user --email you@example.com --admin
 # App: http://localhost:3000 (the browser only talks to the frontend, which proxies /api to the backend)
 # API docs: http://127.0.0.1:8000/docs (bound to loopback only)
+# Optional dev inbox for password-reset mail: docker compose --profile mail up, then MAIL_BACKEND=smtp,
+# SMTP_HOST=mailpit, SMTP_PORT=1025, SMTP_STARTTLS=false in .env; read mail at http://localhost:8025
 name: ai-course-assistant
 
 services:
@@ -30,8 +33,13 @@ services:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/course_assistant
       UPLOAD_DIR: /app/data/uploads
       DEMO_DIR: /app/sample_data
+      MAIL_OUTBOX_DIR: /app/data/outbox
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
+      # The frontend container (fixed address below) is the proxy whose X-Forwarded-For is believed.
+      TRUSTED_PROXY_IPS: 172.28.0.10
     volumes:
       - uploads:/app/data/uploads
+      - outbox:/app/data/outbox
       - ./sample_data:/app/sample_data:ro
     ports:
       - "127.0.0.1:8000:8000"
@@ -44,12 +52,32 @@ services:
     environment:
       BACKEND_URL: http://backend:8000
       APP_API_TOKEN: ${APP_API_TOKEN:-}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-aica_session}
+      CSRF_COOKIE_NAME: ${CSRF_COOKIE_NAME:-aica_csrf}
+      # Set to 1 when a TLS reverse proxy (Caddy/nginx) appends X-Forwarded-For in front of this service.
+      TRUSTED_PROXY_COUNT: ${TRUSTED_PROXY_COUNT:-0}
     ports:
       - "3000:3000"
+    networks:
+      default:
+        ipv4_address: 172.28.0.10
     depends_on:
       backend:
         condition: service_healthy
 
+  mailpit:
+    image: axllent/mailpit:latest
+    profiles: ["mail"]
+    ports:
+      - "127.0.0.1:8025:8025"
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
 volumes:
   pgdata:
   uploads:
+  outbox:

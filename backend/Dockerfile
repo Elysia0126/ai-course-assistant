@@ -23,7 +23,7 @@ COPY alembic ./alembic
 COPY app ./app
 
 RUN useradd --create-home --uid 10001 appuser \
-    && mkdir -p /app/data/uploads \
+    && mkdir -p /app/data/uploads /app/data/outbox \
     && chown -R appuser:appuser /app/data
 USER appuser
 
@@ -33,4 +33,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=4)"
 
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"]
+# No --proxy-headers: the app decides itself which X-Forwarded-For to believe (APP_API_TOKEN / TRUSTED_PROXY_IPS).
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers"]

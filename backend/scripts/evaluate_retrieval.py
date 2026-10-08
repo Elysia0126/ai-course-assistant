@@ -14,6 +14,7 @@ strategies and catching regressions, not a general accuracy claim.
 
 import argparse
 import json
+import secrets
 import sys
 import tempfile
 from pathlib import Path
@@ -22,6 +23,7 @@ from typing import Any
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 ROOT = BACKEND_DIR.parent
 sys.path.insert(0, str(BACKEND_DIR))
+sys.path.insert(0, str(BACKEND_DIR / "scripts"))
 
 MODES = ("vector", "keyword", "hybrid")
 KS = (1, 3, 5)
@@ -45,9 +47,12 @@ def is_relevant(hit: dict[str, Any], targets: list[dict[str, Any]]) -> bool:
 
 def evaluate(embedding: str, database_url: str | None, top_k: int = 10) -> dict[str, Any]:
     from fastapi.testclient import TestClient
+    from script_auth import sign_in
+    from sqlalchemy import delete
 
     from app.core.config import Settings
     from app.main import create_app
+    from app.models import User
 
     dataset = json.loads((ROOT / "evaluation" / "retrieval_questions.json").read_text(encoding="utf-8"))
     questions = dataset["questions"]
@@ -63,6 +68,15 @@ def evaluate(embedding: str, database_url: str | None, top_k: int = 10) -> dict[
             llm_provider="offline",
         )
         with TestClient(create_app(settings)) as client:
+            # Through the real API as a real, throw-away account (removed again at the end).
+            evaluator = sign_in(
+                client,
+                origin=settings.app_public_url,
+                email=f"evaluation-{secrets.token_hex(4)}@example.com",
+                password=secrets.token_urlsafe(24),
+                create=True,
+                prefix="/api",
+            )
             course = client.post("/api/courses", json={"name": "Retrieval evaluation"}).json()
             try:
                 files = [
@@ -93,6 +107,9 @@ def evaluate(embedding: str, database_url: str | None, top_k: int = 10) -> dict[
                     rows.append(row)
             finally:
                 client.delete(f"/api/courses/{course['id']}")
+                with client.app.state.session_factory() as db:
+                    db.execute(delete(User).where(User.id == evaluator["id"]))
+                    db.commit()
 
     def summarize(subset: list[dict[str, Any]], mode: str) -> dict[str, float]:
         if not subset:
