@@ -16,7 +16,11 @@ Remote: GitHub Actions `ubuntu-latest` with the `pgvector/pgvector:pg17` service
 | Ruff lint + format | local + CI | clean |
 | Frontend `npm ci`, `next typegen`, ESLint, `tsc --noEmit`, Vitest (**49 tests**), production build | local + CI | passed |
 | Retrieval evaluation gate (hybrid Recall@5 ≥ 0.9), now run through the authenticated API | local + CI | Recall@5 = 1.00 (hash embeddings) |
-| Docker images (`docker compose build`) | CI | see the CI run for this commit |
+| Docker images (`docker compose build`) | CI | both built |
+
+CI run [37720305083](https://github.com/Elysia0126/ai-course-assistant/actions/runs/37720305083) (commit `bbe7a31`)
+reproduced every number above: 157 + 1 skipped on SQLite, 158 on PostgreSQL 17, 93.43% combined coverage, 49
+frontend tests, the retrieval gate and both image builds.
 | Alembic upgrade → downgrade → upgrade with **pre-existing data** (courses, documents, chunks, chats) | local SQLite + a throw-away PostgreSQL database | data kept, owners `NULL`, PG indexes intact, `NOT VALID` check rejects new ownerless rows |
 
 What the account tests cover: registration (validation, normalised unique email, concurrent duplicates, Argon2id,
