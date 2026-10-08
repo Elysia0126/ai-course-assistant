@@ -15,6 +15,12 @@ body {
   color: #0f172a;
 }
 
+/* Password fields have their own show/hide button; hide Edge's built-in one so there aren't two. */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
 /* Flashcard flip */
 .flip-scene {
   perspective: 1400px;

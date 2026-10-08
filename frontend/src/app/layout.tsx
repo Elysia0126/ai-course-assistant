@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 
-import { AppHeader } from "@/components/app-header";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -13,12 +12,12 @@ export const metadata: Metadata = {
   description: "Upload lecture slides and notes, then ask cited questions, take quizzes and study flashcards.",
 };
 
+// The header and <main> come from the route groups: (app) for signed-in pages, (auth) for sign-in pages.
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex min-h-full flex-col font-sans">
-        <AppHeader />
-        <main className="flex flex-1 flex-col">{children}</main>
+        {children}
         <Toaster richColors position="bottom-right" closeButton />
       </body>
     </html>

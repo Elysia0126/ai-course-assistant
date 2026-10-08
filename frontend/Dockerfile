@@ -7,9 +7,8 @@ RUN npm ci
 FROM node:24-alpine AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
-# Empty by default: the browser calls this server's /api proxy, which reads BACKEND_URL at runtime.
-ARG NEXT_PUBLIC_API_URL=
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# No build-time configuration: the browser only calls this server's /api proxy, which reads BACKEND_URL,
+# APP_API_TOKEN and the cookie names at runtime.
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

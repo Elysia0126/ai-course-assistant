@@ -201,6 +201,23 @@ export interface DeckDetail extends DeckSummary {
 
 export type Rating = "again" | "hard" | "good" | "easy";
 
+export type Role = "user" | "admin";
+
+/** The signed-in account (GET /api/auth/me). Never includes the password hash or the session token. */
+export interface User {
+  id: string;
+  email: string;
+  display_name: string | null;
+  role: Role;
+  is_active: boolean;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+export interface AdminUser extends User {
+  course_count: number;
+}
+
 export interface Health {
   status: string;
   version: string;
